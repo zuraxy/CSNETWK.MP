@@ -1,14 +1,27 @@
 # Test from https://wiki.python.org/moin/UdpCommunication
 import socket
+import threading
+import random
 
-UDP_IP = "127.0.0.1"
-UDP_PORT = 5005
-MESSAGE = b"hello, World!"
+client = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+client.bind(("localhost", random.randint(8000, 9000)))
+name = input("Nickname: ")
 
-print("UDP target IP: %s" % UDP_IP)
-print("UDP target port: %s" % UDP_PORT)
-print("message: %s" % MESSAGE)
+def receive():
+    while True:
+        try:
+            message, _ = client.recvfrom(1024)
+            print(message.decode())
+        except:
+            pass
+t = threading.Thread(target=receive)
+t.start()
 
-sock = socket.socket(socket.AF_INET, # Internet
-                     socket.SOCK_DGRAM) # UDP
-sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
+client.sendto(f"SIGNUP_TAG:{name}".encode(),("localhost",50999))
+
+while  True:
+    message = input("")
+    if message == "!q":
+        exit()
+    else:
+        client.sendto(f"{name}: {message}".encode(),("localhost",50999))
