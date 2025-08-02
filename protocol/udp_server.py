@@ -2,11 +2,14 @@
 import socket
 import threading
 import queue
+from protocol import Protocol
 
+encode_message = Protocol.encode_message
+decode_message = Protocol.decode_message
 
 messages = queue.Queue()
 clients = []
-
+ttl_seconds = 3600
 
 server = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 
@@ -28,11 +31,16 @@ def broadcast():
             print(message.decode())
             if addr not in clients:
                 clients.append(addr)
+            msg_dict = decode_message(message)
+            # This checks if TTL is in the msg and appends a an expiration time default 3600 
+            if 'TTL' in msg_dict:
+                msg_dict['TTL'] = '3600'
+                message = encode_message(msg_dict)
             for client in clients: 
                 try:
                     if message.decode().startswith("SIGNUP_TAG:"):
                         name = message.decode()[message.decode().index(":")+1:]
-                        server.sendto(f"{name} joined:".encode(),client)
+                        print(f"{name} joined.") 
                     else:
                         server.sendto(message,client)
                 except:

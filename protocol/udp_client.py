@@ -1,11 +1,19 @@
-# Test from https://wiki.python.org/moin/UdpCommunication
+# 
 import socket
 import threading
 import random
+import secrets
+import time
+from protocol import Protocol
+
+encode_message = Protocol.encode_message
+decode_message = Protocol.decode_message
 
 client = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 client.bind(("localhost", random.randint(8000, 9000)))
-name = input("Nickname: ")
+
+name = input("User: ")
+
 # Receives messages that is threaded
 def receive():
     while True:
@@ -32,6 +40,10 @@ def get_local_ip():
     finally:
         s.close()
     return IP
+# generates a 64 bit binary in hext format
+def generate_message_id():  
+    return secrets.token_hex(8)
+
 
 # This is main loop for sending messages
 while  True:
@@ -41,16 +53,21 @@ while  True:
     # Multiple if checks to determine what format to use for verbose 
     if msg_type == "POST":
         msg = input("Message: ")
+        msg_id = generate_message_id()
+        timestamp = int(time.time())
+        user_id = name+'@'+user_address
+        time_and_ttl = 3600+timestamp
         data = {
             'TYPE':'POST',
-            'USER_ID':'{name}@{user_address}',
-            'CONTENT':'{msg}',
-            'TTL':''
+            'USER_ID':f'{user_id}',
+            'CONTENT':f'{msg}',
+            'TTL':'3600',
+            'MESSAGE_ID' :f'{msg_id}',
+            'TOKEN': f'{user_id}|{time_and_ttl}|broadcast'
               }
-    message = input("")
-    if message == "PROFILE":
+    elif msg_type == "PROFILE":
         exit()
-    if message == "DM":
+    elif msg_type == "DM":
         exit()
-    else:
-        client.sendto(f"{name}: {message}".encode(),("localhost",50999))
+
+    client.sendto(encode_message(data), ("localhost", 50999))
