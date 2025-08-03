@@ -4,8 +4,8 @@ import threading
 import queue
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from protocol.protocol import Protocol
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))    # Adds parent directory of current script's directory to Python's module search path
+from protocol.protocol import Protocol                                          # In folder "protocol", get file "protocol" and import class Protocol (practically, the function we're targeting)
 
 PORT_NUMBER = 50999
 

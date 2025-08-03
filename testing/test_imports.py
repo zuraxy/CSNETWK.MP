@@ -5,7 +5,7 @@ Test script for protocol imports
 import sys
 import os
 
-# Add the parent directory to Python path to access protocol module
+# Adds the parent directory to Python path to access protocol module - if it isnt able to do this then it isnt able to access protocol, thereby entailing imports failed.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
