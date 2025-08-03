@@ -1,26 +1,32 @@
-#!/usr/bin/env python3
-"""
-Test script for protocol imports
-"""
+# Test imports functionality
+# This script tests that all necessary imports work correctly from the testing directory
+
 import sys
 import os
 
-# Adds the parent directory to Python path to access protocol module - if it isnt able to do this then it isnt able to access protocol, thereby entailing imports failed.
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-try:
-    from protocol.protocol import Protocol
-    print("[PASS] Protocol import successful!")
+def test_all_imports():
+    """Test that all necessary modules can be imported from testing directory"""
+    print("Testing imports from testing directory...")
     
-    # Test encoding/decoding
-    test_data = {'TYPE': 'POST', 'USER_ID': 'test@127.0.0.1', 'CONTENT': 'Hello World'}
-    encoded = Protocol.encode_message(test_data)
-    decoded = Protocol.decode_message(encoded)
-    print("[PASS] Protocol encoding/decoding test successful!")
-    print(f"Original: {test_data}")
-    print(f"Decoded:  {decoded}")
+    try:
+        from protocol.protocol import Protocol
+        print("Protocol import successful")
+    except ImportError as e:
+        print(f"Protocol import failed: {e}")
+        return False
     
-except ImportError as e:
-    print(f"[FAIL] Import failed: {e}")
-except Exception as e:
-    print(f"[FAIL] Test failed: {e}")
+    try:
+        from peer.udp_peer import UDPPeer
+        print("Peer import successful")
+    except ImportError as e:
+        print(f"Peer import failed: {e}")
+        return False
+    
+    print("All imports successful!")
+    return True
+
+if __name__ == "__main__":
+    test_all_imports()

@@ -57,11 +57,13 @@ def main():
         # List of tests to run
         tests = [
             ("test_imports.py", "Protocol Import and Basic Functionality Test"),
+            ("test_p2p_setup.py", "P2P Implementation Setup and Verification Test"),
             ("test_dm.py", "Direct Message (DM) Functionality Test"),
             ("test_profile.py", "Profile Message Functionality Test"),
+            ("test_p2p.py", "Peer-to-Peer (P2P) Architecture Test"),
             ("test_verbose_mode.py", "Verbose Mode Display Simulation"),
             ("demo_verbose_modes.py", "Verbose vs Non-Verbose Mode Comparison"),
-            ("create_test_avatar.py", "Test Avatar Image Creation")
+            ("create_test_avatar.py", "Test Avatar Image Creation Utility")
         ]
         
         # Run each test
@@ -93,10 +95,11 @@ def main():
             print(f"\n[WARNING] {total - passed} test(s) failed. Please check the output above.")
         
         print(f"\n[INFO] Next Steps:")
-        print("1. Start the server: python ../run_server.py")
-        print("2. Start client(s): python ../run_client.py")
-        print("3. Test the full application with multiple clients")
+        print("1. Start peer(s): python ../run_peer.py (in multiple terminals)")
+        print("2. Test peer discovery: python ../peer/discover_peers.py")
+        print("3. Test the full P2P application with multiple peers")
         print("4. Try both verbose and non-verbose modes")
+        print("5. No server needed - fully peer-to-peer architecture!")
         
     finally:
         # Change back to original directory

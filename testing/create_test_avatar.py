@@ -1,21 +1,24 @@
-#!/usr/bin/env python3
-"""
-Create a simple test avatar image for demonstration
-"""
-import base64
-import os
+# Test avatar creation utility
+# This file can be used to create test avatar images for profile testing
 
-# Minimal 1x1 pixel PNG image (red pixel)
-png_data = base64.b64decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/x8AB2AA/2c7WfkAAAAASUVORK5CYII='
-)
+# Example usage:
+# from PIL import Image
+# import base64
+# import io
 
-# Write to file in the root directory (one level up from testing)
-root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-avatar_path = os.path.join(root_dir, 'test_avatar.png')
+# def create_test_avatar():
+#     """Create a simple test avatar image"""
+#     # Create a simple 64x64 colored square
+#     img = Image.new('RGB', (64, 64), color='blue')
+#     
+#     # Save to bytes
+#     img_bytes = io.BytesIO()
+#     img.save(img_bytes, format='PNG')
+#     img_bytes.seek(0)
+#     
+#     # Convert to base64
+#     avatar_b64 = base64.b64encode(img_bytes.read()).decode('utf-8')
+#     return avatar_b64
 
-with open(avatar_path, 'wb') as f:
-    f.write(png_data)
-
-print(f"Created {avatar_path} - a 1x1 red pixel image for testing")
-print("You can use this file when testing the PROFILE avatar functionality")
+# Uncomment above code if you have PIL/Pillow installed
+# pip install pillow

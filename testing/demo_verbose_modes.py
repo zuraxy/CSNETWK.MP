@@ -73,6 +73,8 @@ def demo_verbose_modes():
 
 if __name__ == "__main__":
     demo_verbose_modes()
-    print("\n[SUCCESS] Start the client and try both modes!")
-    print("   From root directory: python run_client.py")
-    print("   Or from testing directory: python ../run_client.py")
+    print("\n[SUCCESS] Start the peer and try both modes!")
+    print("   From root directory: python run_peer.py")
+    print("   Or from testing directory: python ../run_peer.py")
+    print("   No server needed - P2P architecture!")
+    print("   Start multiple peers to test communication")

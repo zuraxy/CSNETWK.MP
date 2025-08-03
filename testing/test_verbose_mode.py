@@ -97,9 +97,7 @@ def test_verbose_mode_simulation():
     
     # Non-verbose PROFILE
     print(f"\nPROFILE Message (Non-Verbose):")
-    has_avatar = 'AVATAR_DATA' in profile_msg
-    avatar_emoji = "[AVATAR]" if has_avatar else ""
-    print(f"[USER] {profile_msg['DISPLAY_NAME']} {avatar_emoji}")
+    print(f"[USER] {profile_msg['DISPLAY_NAME']}")
     print(f"   {profile_msg['STATUS']}")
     
     print("\n" + "="*50)
@@ -120,9 +118,10 @@ def test_verbose_mode_simulation():
 if __name__ == "__main__":
     test_verbose_mode_simulation()
     print("\n[PASS] Verbose mode demonstration complete!")
-    print("\nHow to use verbose mode in the client:")
-    print("1. When starting client, choose 'n' for 'Enable verbose mode?'")
+    print("\nHow to use verbose mode in the P2P peer:")
+    print("1. When starting peer, choose 'n' for 'Enable verbose mode?'")
     print("2. Or use 'VERBOSE' command during runtime to toggle")
     print("3. Verbose OFF = Clean, simple display with display names")
     print("4. Verbose ON = Full technical details with user IDs and message types")
-    print("\nTo run the client: python ../run_client.py")
+    print("\nTo run the P2P peer: python ../run_peer.py")
+    print("No server needed - peers discover each other automatically!")
