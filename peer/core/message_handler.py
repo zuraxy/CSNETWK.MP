@@ -41,10 +41,6 @@ class MessageHandler:
     def handle_peer_discovery(self, msg_dict, addr):
         """Handle peer discovery messages"""
         self.peer_manager.handle_peer_discovery(msg_dict, addr)
-        
-        if self.verbose_mode:
-            sender_id = msg_dict.get('USER_ID', 'Unknown')
-            print(f"[DISCOVERY] Found peer: {sender_id}")
     
     def handle_post_message(self, msg_dict, addr):
         """Handle broadcast POST messages"""

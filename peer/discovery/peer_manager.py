@@ -82,13 +82,16 @@ class PeerManager:
         """Handle incoming peer discovery messages"""
         sender_id = msg_dict.get('USER_ID', '')
         if sender_id and sender_id != self.user_id:
+            # Check if this is a new peer (not already known)
+            is_new_peer = sender_id not in self.known_peers
+            
             self.update_peer_info(sender_id, addr[0], msg_dict.get('PORT', addr[1]))
             
             # Send discovery response
             self.send_discovery_response(addr[0], int(msg_dict.get('PORT', addr[1])))
             
-            # Trigger callback if set
-            if self.on_peer_discovered:
+            # Only trigger callback for newly discovered peers
+            if is_new_peer and self.on_peer_discovered:
                 self.on_peer_discovered(sender_id)
     
     def send_discovery_response(self, target_ip, target_port):
