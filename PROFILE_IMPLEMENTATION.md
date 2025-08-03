@@ -1,7 +1,11 @@
+# A.I. Disclaimer
+This markdown is A.I. generated, but has been reviewed, verified, and revised according to the group's own comprehension.
+
+
 # PROFILE Implementation Guide
 
 ## Overview
-The PROFILE functionality has been successfully implemented according to the RFC specifications. Users can now announce their identity to the network, including display name, status, and optional profile pictures.
+The PROFILE functionality has been implemented following the RFC specifications. Through this feature, users are given the ability to announce their identity to the network, including their chosen display name, status, and optionally, their profile picture.
 
 ## Features Implemented
 
@@ -14,8 +18,8 @@ The PROFILE functionality has been successfully implemented according to the RFC
 - **AVATAR_ENCODING**: Currently always base64 (optional)
 - **AVATAR_DATA**: Image data encoded as base64, under ~20KB (optional)
 - **TIMESTAMP**: Unix timestamp when profile was created
-- **MESSAGE_ID**: Unique identifier
-- **TOKEN**: Authorization token with format `user_id|timestamp+ttl|profile`
+- **MESSAGE_ID**: Unique identifier                                              (*should be removed)
+- **TOKEN**: Authorization token with format `user_id|timestamp+ttl|profile`     (*should be removed)
 
 ### 2. Server Functionality
 - **Profile Broadcasting**: Broadcasts PROFILE messages to all connected clients
@@ -159,5 +163,3 @@ The implementation fully complies with the provided RFC specification:
 - ✅ MIME type metadata
 - ✅ Backward compatibility for non-avatar-supporting hosts
 - ✅ Broadcast behavior for network discovery
-
-The PROFILE functionality is now ready for production use! 🎉

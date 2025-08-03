@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 Launcher script for UDP Client
-Run this from the root directory to start the client
+This should be executed from the root directory to start the client
 """
 import sys
 import os
 
 # Add the current directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))) # since this is run_client, we want 0 so that python first searches/indexes this file's directory. In short, kinda just adds to path - priority 0
 
 # Import and run the client
 if __name__ == "__main__":

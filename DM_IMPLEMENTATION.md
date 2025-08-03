@@ -1,5 +1,5 @@
 # A.I. Disclaimer
-This markdown is A.I. generated, but has been properly reviewed, verified, and revised according to the group's own comprehension.
+This markdown is A.I. generated, but has been thoroughly reviewed, verified, and revised according to the group's own comprehension.
 
 # DM (Direct Message) Implementation Guide
 

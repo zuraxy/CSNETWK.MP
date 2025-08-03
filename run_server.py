@@ -7,7 +7,7 @@ import sys
 import os
 
 # Add the current directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))) # since this is run_server, we want 0 so that python first searches/indexes this file's directory. In short, kinda just adds to path - priority 0
 
 # Import and run the server
 if __name__ == "__main__":
