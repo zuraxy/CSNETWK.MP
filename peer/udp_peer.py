@@ -29,6 +29,18 @@ class UDPPeer:
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  # Enable broadcast
         self.socket.bind(("", self.local_port))
         
+        # Discovery socket - listens on broadcast port for peer announcements
+        self.discovery_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.discovery_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            self.discovery_socket.bind(("", 50999))
+            self.has_discovery_socket = True
+            print(f"Discovery socket bound to port 50999")
+        except Exception as e:
+            print(f"Warning: Could not bind discovery socket to port 50999: {e}")
+            print(f"Discovery will use main socket only")
+            self.has_discovery_socket = False
+        
         # Peer information
         self.username = ""
         self.local_ip = self.get_local_ip()
@@ -82,6 +94,12 @@ class UDPPeer:
         receive_thread.daemon = True
         receive_thread.start()
         
+        # Start discovery listener thread if we have discovery socket
+        if self.has_discovery_socket:
+            discovery_receive_thread = threading.Thread(target=self.receive_discovery_messages)
+            discovery_receive_thread.daemon = True
+            discovery_receive_thread.start()
+        
         discovery_thread = threading.Thread(target=self.peer_discovery)
         discovery_thread.daemon = True
         discovery_thread.start()
@@ -101,6 +119,16 @@ class UDPPeer:
             except Exception as e:
                 if self.verbose_mode:
                     print(f"Error receiving message: {e}")
+    
+    def receive_discovery_messages(self):
+        """Listen for discovery broadcasts on port 50999"""
+        while True:
+            try:
+                data, addr = self.discovery_socket.recvfrom(65536)
+                self.handle_incoming_message(data, addr)
+            except Exception as e:
+                if self.verbose_mode:
+                    print(f"Error receiving discovery message: {e}")
     
     def handle_incoming_message(self, data, addr):
         """Process incoming messages from other peers"""
@@ -171,7 +199,7 @@ class UDPPeer:
             else:
                 display_name = self.get_display_name(from_user)
                 avatar_info = self.get_avatar_info(from_user)
-                print(f"\n💬 {display_name}{avatar_info}: {content}")
+                print(f"\n{display_name}{avatar_info}: {content}")
     
     def handle_profile_message(self, msg_dict):
         """Handle profile update messages"""
@@ -190,8 +218,7 @@ class UDPPeer:
             if has_avatar:
                 print(f"  Avatar: {avatar_type} (base64 encoded)")
         else:
-            avatar_emoji = "📷" if has_avatar else ""
-            print(f"\n👤 {display_name} {avatar_emoji}")
+            print(f"\n{display_name}")
             print(f"   {status}")
     
     def handle_peer_list_request(self, msg_dict, addr):
@@ -220,7 +247,7 @@ class UDPPeer:
                 print(f"\n[PEER LIST] ({count} peers): {', '.join(peers)}")
             else:
                 display_names = [self.get_display_name(peer) for peer in peers]
-                print(f"\n👥 Online ({count}): {', '.join(display_names)}")
+                print(f"\nOnline ({count}): {', '.join(display_names)}")
         except:
             print("\n[ERROR] Could not parse peer list")
     
@@ -251,7 +278,7 @@ class UDPPeer:
     def get_avatar_info(self, user_id):
         """Get avatar information for a user"""
         if user_id in self.user_profiles and self.user_profiles[user_id]['avatar']:
-            return f" 📷({self.user_profiles[user_id]['avatar_type']})"
+            return f"({self.user_profiles[user_id]['avatar_type']})"
         return ""
     
     def peer_discovery(self):
@@ -502,7 +529,7 @@ class UDPPeer:
                 print(f"  - {user_id} ({peer_info['ip']}:{peer_info['port']}) [seen {last_seen}s ago]")
         else:
             peer_names = [self.get_display_name(user_id) for user_id in self.known_peers.keys()]
-            print(f"\n👥 Known Peers ({len(self.known_peers)}): {', '.join(peer_names)}")
+            print(f"\nKnown Peers ({len(self.known_peers)}): {', '.join(peer_names)}")
 
 def main():
     """Main function to start the peer"""
