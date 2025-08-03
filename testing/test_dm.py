@@ -4,8 +4,9 @@ Test script for DM functionality
 """
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Add the parent directory to Python path to access protocol module
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from protocol.protocol import Protocol
 
 def test_dm_message_format():
@@ -37,7 +38,7 @@ def test_dm_message_format():
     assert decoded['TO'] == 'bob@192.168.1.12'
     assert decoded['CONTENT'] == 'Hi Bob!'
     
-    print("✓ DM message format test passed!")
+    print("[PASS] DM message format test passed!")
 
 def test_post_message_format():
     """Test POST message encoding/decoding"""
@@ -66,15 +67,15 @@ def test_post_message_format():
     assert decoded['USER_ID'] == 'alice@192.168.1.11'
     assert decoded['CONTENT'] == 'Hello everyone!'
     
-    print("✓ POST message format test passed!")
+    print("[PASS] POST message format test passed!")
 
 if __name__ == "__main__":
     test_dm_message_format()
     test_post_message_format()
-    print("\n✓ All tests passed! DM implementation is ready to use.")
+    print("\n[PASS] All tests passed! DM implementation is ready to use.")
     print("\nUsage instructions:")
-    print("1. Start the server: python run_server.py")
-    print("2. Start client(s): python run_client.py")
+    print("1. Start the server: python ../run_server.py")
+    print("2. Start client(s): python ../run_client.py")
     print("3. Use 'DM' command to send direct messages")
     print("4. Use 'LIST' command to see online users")
     print("5. Use 'POST' command to broadcast messages")

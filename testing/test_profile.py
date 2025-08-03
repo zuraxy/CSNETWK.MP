@@ -6,8 +6,9 @@ import sys
 import os
 import base64
 import tempfile
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Add the parent directory to Python path to access protocol module
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from protocol.protocol import Protocol
 
 def create_test_image():
@@ -51,7 +52,7 @@ def test_profile_message_format():
     assert decoded['DISPLAY_NAME'] == 'Dave'
     assert decoded['STATUS'] == 'Exploring LSNP!'
     
-    print("✓ PROFILE message format test passed!")
+    print("[PASS] PROFILE message format test passed!")
 
 def test_profile_with_avatar():
     """Test PROFILE message with avatar data"""
@@ -99,7 +100,7 @@ def test_profile_with_avatar():
         decoded_avatar = base64.b64decode(decoded['AVATAR_DATA'])
         assert decoded_avatar == avatar_bytes
         
-        print("✓ PROFILE message with avatar test passed!")
+        print("[PASS] PROFILE message with avatar test passed!")
         print(f"  Avatar size: {len(avatar_bytes)} bytes")
         print(f"  Base64 size: {len(avatar_b64)} characters")
         
@@ -133,23 +134,23 @@ def test_profile_size_limits():
     print(f"Large PROFILE message size: {message_size} bytes")
     
     if message_size > 65536:  # UDP buffer limit
-        print("⚠️  Warning: Message exceeds recommended UDP buffer size")
+        print("[WARN] Warning: Message exceeds recommended UDP buffer size")
     else:
-        print("✓ Message size within UDP buffer limits")
+        print("[PASS] Message size within UDP buffer limits")
     
     # Test if it can be decoded
     decoded = Protocol.decode_message(encoded)
     assert decoded['AVATAR_DATA'] == large_avatar_data
-    print("✓ Large PROFILE message encoding/decoding works")
+    print("[PASS] Large PROFILE message encoding/decoding works")
 
 if __name__ == "__main__":
     test_profile_message_format()
     test_profile_with_avatar()
     test_profile_size_limits()
-    print("\n✓ All PROFILE tests passed!")
+    print("\n[PASS] All PROFILE tests passed!")
     print("\nUsage instructions:")
-    print("1. Start the server: python run_server.py")
-    print("2. Start client(s): python run_client.py")
+    print("1. Start the server: python ../run_server.py")
+    print("2. Start client(s): python ../run_client.py")
     print("3. Use 'PROFILE' command to create/update your profile")
     print("4. Other clients will see your profile updates automatically")
     print("5. Avatar files should be under ~20KB for best performance")

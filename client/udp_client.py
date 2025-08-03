@@ -19,6 +19,36 @@ client.bind(("localhost", random.randint(8000, 9000)))
 
 name = input("User: ")
 
+# Verbose mode setting
+verbose_mode = input("Enable verbose mode? (y/n, default=y): ").strip().lower()
+verbose_mode = verbose_mode != 'n'  # Default to True unless explicitly 'n'
+print(f"Verbose mode: {'ON' if verbose_mode else 'OFF'}")
+
+# Profile storage to remember display names and avatars
+user_profiles = {}  # user_id -> {'display_name': str, 'avatar': bool, 'avatar_type': str}
+
+def update_user_profile(user_id, display_name=None, has_avatar=False, avatar_type=''):
+    """Update stored user profile information"""
+    if user_id not in user_profiles:
+        user_profiles[user_id] = {'display_name': '', 'avatar': False, 'avatar_type': ''}
+    
+    if display_name:
+        user_profiles[user_id]['display_name'] = display_name
+    user_profiles[user_id]['avatar'] = has_avatar
+    user_profiles[user_id]['avatar_type'] = avatar_type
+
+def get_display_name(user_id):
+    """Get display name for a user, fallback to user_id if not available"""
+    if user_id in user_profiles and user_profiles[user_id]['display_name']:
+        return user_profiles[user_id]['display_name']
+    return user_id
+
+def get_avatar_info(user_id):
+    """Get avatar information for a user"""
+    if user_id in user_profiles and user_profiles[user_id]['avatar']:
+        return f" 📷({user_profiles[user_id]['avatar_type']})"
+    return ""
+
 # Receives messages that is threaded
 def receive():
     while True:
@@ -32,21 +62,39 @@ def receive():
                 if msg_type == 'POST':
                     user_id = msg_dict.get('USER_ID', 'Unknown')
                     content = msg_dict.get('CONTENT', '')
-                    print(f"\n[POST] {user_id}: {content}")
+                    
+                    if verbose_mode:
+                        print(f"\n[POST] {user_id}: {content}")
+                    else:
+                        display_name = get_display_name(user_id)
+                        avatar_info = get_avatar_info(user_id)
+                        print(f"\n{display_name}{avatar_info}: {content}")
                 
                 elif msg_type == 'DM':
                     from_user = msg_dict.get('FROM', 'Unknown')
                     content = msg_dict.get('CONTENT', '')
-                    print(f"\n[DM] From {from_user}: {content}")
+                    
+                    if verbose_mode:
+                        print(f"\n[DM] From {from_user}: {content}")
+                    else:
+                        display_name = get_display_name(from_user)
+                        avatar_info = get_avatar_info(from_user)
+                        print(f"\n💬 {display_name}{avatar_info}: {content}")
                 
                 elif msg_type == 'ERROR':
                     error_msg = msg_dict.get('MESSAGE', 'Unknown error')
-                    print(f"\n[ERROR] {error_msg}")
+                    if verbose_mode:
+                        print(f"\n[ERROR] {error_msg}")
+                    else:
+                        print(f"\n❌ {error_msg}")
                 
                 elif msg_type == 'USER_LIST':
                     users = msg_dict.get('USERS', 'No users')
                     count = msg_dict.get('COUNT', '0')
-                    print(f"\n[ONLINE USERS] ({count} users): {users}")
+                    if verbose_mode:
+                        print(f"\n[ONLINE USERS] ({count} users): {users}")
+                    else:
+                        print(f"\n👥 Online ({count}): {users}")
                 
                 elif msg_type == 'PROFILE':
                     user_id = msg_dict.get('USER_ID', 'Unknown')
@@ -55,16 +103,27 @@ def receive():
                     has_avatar = 'AVATAR_DATA' in msg_dict
                     avatar_type = msg_dict.get('AVATAR_TYPE', '')
                     
-                    print(f"\n[PROFILE UPDATE] {display_name} ({user_id})")
-                    print(f"  Status: {status}")
-                    if has_avatar:
-                        print(f"  Avatar: {avatar_type} (base64 encoded)")
+                    # Update our profile storage
+                    update_user_profile(user_id, display_name, has_avatar, avatar_type)
+                    
+                    if verbose_mode:
+                        print(f"\n[PROFILE UPDATE] {display_name} ({user_id})")
+                        print(f"  Status: {status}")
+                        if has_avatar:
+                            print(f"  Avatar: {avatar_type} (base64 encoded)")
+                        else:
+                            print("  Avatar: None")
                     else:
-                        print("  Avatar: None")
+                        avatar_emoji = "📷" if has_avatar else ""
+                        print(f"\n👤 {display_name} {avatar_emoji}")
+                        print(f"   {status}")
                 
                 else:
                     # Unknown protocol message type
-                    print(f"\n[UNKNOWN] {message.decode()}")
+                    if verbose_mode:
+                        print(f"\n[UNKNOWN] {message.decode()}")
+                    else:
+                        print(f"\n❓ {message.decode()}")
                     
             except:
                 # If it's not a valid protocol message, just print as raw text
@@ -98,7 +157,13 @@ def generate_message_id():
 while  True:
     user_address = get_local_ip()
     
-    msg_type = input("What do you want to use (POST/PROFILE/DM/LIST): ").strip().upper()
+    msg_type = input("What do you want to use (POST/PROFILE/DM/LIST/VERBOSE): ").strip().upper()
+    
+    # Handle verbose mode toggle
+    if msg_type == "VERBOSE":
+        verbose_mode = not verbose_mode
+        print(f"Verbose mode: {'ON' if verbose_mode else 'OFF'}")
+        continue
     # Multiple if checks to determine what format to use for verbose 
     if msg_type == "POST":
         msg = input("Message: ")
@@ -221,7 +286,7 @@ while  True:
         
         print(f"Profile created for {display_name} ({user_id})")
     else:
-        print("Invalid command. Use POST, DM, LIST, or PROFILE")
+        print("Invalid command. Use POST, DM, LIST, PROFILE, or VERBOSE")
         continue
 
     client.sendto(encode_message(data), ("localhost", 50999))
