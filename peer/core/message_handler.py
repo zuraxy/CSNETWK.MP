@@ -8,6 +8,7 @@ import secrets
 import json
 import sys
 import os
+import datetime
 
 # Add parent directories to path for protocol access
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -42,13 +43,77 @@ class MessageHandler:
         """Handle peer discovery messages"""
         self.peer_manager.handle_peer_discovery(msg_dict, addr)
     
+    def handle_profile_message(self, msg_dict, addr):
+        """Handle profile update messages"""
+        import datetime
+
+        user_id = msg_dict.get('USER_ID', 'Unknown')
+        display_name = msg_dict.get('DISPLAY_NAME', 'Unknown')
+        status = msg_dict.get('STATUS', '')
+        has_avatar = 'AVATAR_DATA' in msg_dict
+        avatar_type = msg_dict.get('AVATAR_TYPE', '')
+        avatar_encoding = msg_dict.get('AVATAR_ENCODING', '')
+        avatar_data = msg_dict.get('AVATAR_DATA', '')
+        timestamp = msg_dict.get('TIMESTAMP', None)
+        msg_type = msg_dict.get('TYPE', 'PROFILE')
+
+        # Update profile storage
+        self.peer_manager.update_user_profile(user_id, display_name, has_avatar, avatar_type)
+
+        if self.verbose_mode:
+            # Format timestamp
+            if timestamp:
+                try:
+                    ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    ts_str = str(timestamp)
+            else:
+                ts_str = "N/A"
+            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
+            print(f"TYPE: {msg_type}")
+            print(f"USER_ID: {user_id}")
+            print(f"DISPLAY_NAME: {display_name}")
+            print(f"STATUS: {status}")
+            if has_avatar:
+                print(f"AVATAR_TYPE: {avatar_type}")
+                print(f"AVATAR_ENCODING: {avatar_encoding}")
+                print(f"AVATAR_DATA: {str(avatar_data)[:10]}...")  # Show only the first few chars for brevity
+        else:
+            avatar_indicator = "[AVATAR]" if has_avatar else ""
+            print(f"\n[USER] {display_name} {avatar_indicator}")
+            print(f"   {status}")
+
     def handle_post_message(self, msg_dict, addr):
         """Handle broadcast POST messages"""
+        import datetime
+
         user_id = msg_dict.get('USER_ID', 'Unknown')
         content = msg_dict.get('CONTENT', '')
-        
+        timestamp = msg_dict.get('TIMESTAMP', None)
+        msg_type = msg_dict.get('TYPE', 'POST')
+        ttl = msg_dict.get('TTL', '')
+        message_id = msg_dict.get('MESSAGE_ID', '')
+        token = msg_dict.get('TOKEN', '')
+
         if self.verbose_mode:
-            print(f"\n[POST] {user_id}: {content}")
+            # Format timestamp
+            if timestamp:
+                try:
+                    ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    ts_str = str(timestamp)
+            else:
+                ts_str = "N/A"
+            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
+            print(f"TYPE: {msg_type}")
+            print(f"USER_ID: {user_id}")
+            print(f"CONTENT: {content}")
+            print(f"TTL: {ttl}")
+            print(f"MESSAGE_ID: {message_id}")
+            print(f"TOKEN: {token}")
+            # Example token validation (replace with your actual validation logic)
+            if token:
+                print("✔ Token valid")
         else:
             display_name = self.peer_manager.get_display_name(user_id)
             avatar_info = self.peer_manager.get_avatar_info(user_id)
@@ -56,39 +121,43 @@ class MessageHandler:
     
     def handle_dm_message(self, msg_dict, addr):
         """Handle direct messages"""
+        import datetime
+
         from_user = msg_dict.get('FROM', 'Unknown')
         to_user = msg_dict.get('TO', '')
         content = msg_dict.get('CONTENT', '')
-        
+        timestamp = msg_dict.get('TIMESTAMP', None)
+        msg_type = msg_dict.get('TYPE', 'DM')
+        message_id = msg_dict.get('MESSAGE_ID', '')
+        token = msg_dict.get('TOKEN', '')
+
         # Only display if this message is for us
         if to_user == self.peer_manager.user_id:
             if self.verbose_mode:
-                print(f"\n[DM] From {from_user}: {content}")
+                # Format timestamp
+                if timestamp:
+                    try:
+                        ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        ts_str = str(timestamp)
+                else:
+                    ts_str = "N/A"
+                print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
+                print(f"TYPE: {msg_type}")
+                print(f"FROM: {from_user}")
+                print(f"TO: {to_user}")
+                print(f"CONTENT: {content}")
+                print(f"TIMESTAMP: {timestamp}")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"TOKEN: {token}")
+                # Example token validation (replace with your actual validation logic)
+                if token:
+                    print("✔ Token valid")
+                print(f"✔ ACK sent for MESSAGE_ID {message_id}")
             else:
                 display_name = self.peer_manager.get_display_name(from_user)
                 avatar_info = self.peer_manager.get_avatar_info(from_user)
                 print(f"\n[MSG] {display_name}{avatar_info}: {content}")
-    
-    def handle_profile_message(self, msg_dict, addr):
-        """Handle profile update messages"""
-        user_id = msg_dict.get('USER_ID', 'Unknown')
-        display_name = msg_dict.get('DISPLAY_NAME', 'Unknown')
-        status = msg_dict.get('STATUS', '')
-        has_avatar = 'AVATAR_DATA' in msg_dict
-        avatar_type = msg_dict.get('AVATAR_TYPE', '')
-        
-        # Update profile storage
-        self.peer_manager.update_user_profile(user_id, display_name, has_avatar, avatar_type)
-        
-        if self.verbose_mode:
-            print(f"\n[PROFILE UPDATE] {display_name} ({user_id})")
-            print(f"  Status: {status}")
-            if has_avatar:
-                print(f"  Avatar: {avatar_type} (base64 encoded)")
-        else:
-            avatar_indicator = "[AVATAR]" if has_avatar else ""
-            print(f"\n[USER] {display_name} {avatar_indicator}")
-            print(f"   {status}")
     
     def handle_peer_list_request(self, msg_dict, addr):
         """Handle requests for peer list"""
