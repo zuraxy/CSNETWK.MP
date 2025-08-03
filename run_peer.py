@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import and run the modular peer
 if __name__ == "__main__":
-    from peer.udp_peer_modular import main
+    from peer.core.peer_core import main
     print("=" * 60)
     print("UDP PEER-TO-PEER CHAT (MODULAR ARCHITECTURE)")
     print("=" * 60)

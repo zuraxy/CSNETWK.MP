@@ -9,10 +9,10 @@ import os
 # Add parent directory to path for protocol access
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from peer.modules.network_manager import NetworkManager
-from peer.modules.peer_manager import PeerManager
-from peer.modules.message_handler import MessageHandler
-from peer.modules.user_interface import UserInterface
+from peer.network.network_manager import NetworkManager
+from peer.discovery.peer_manager import PeerManager
+from peer.core.message_handler import MessageHandler
+from peer.ui.user_interface import UserInterface
 from peer.config.settings import DEFAULT_VERBOSE_MODE
 
 
