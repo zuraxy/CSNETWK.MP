@@ -4,7 +4,10 @@ import threading
 import random
 import secrets
 import time
-from protocol import Protocol
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from protocol.protocol import Protocol
 
 encode_message = Protocol.encode_message
 decode_message = Protocol.decode_message
