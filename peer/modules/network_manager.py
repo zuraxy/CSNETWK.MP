@@ -10,14 +10,20 @@ import time
 import sys
 import os
 
-# Add parent directories to path for protocol access
+# Add parent directories to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from protocol.protocol import Protocol
+from peer.config.settings import (
+    DISCOVERY_PORT, 
+    PEER_PORT_RANGE,
+    SOCKET_BUFFER_SIZE,
+    BROADCAST_ADDRESSES
+)
 
 class NetworkManager:
     """Manages all network communication for P2P peers"""
     
-    def __init__(self, discovery_port=50999, peer_port_range=(8000, 9999)):
+    def __init__(self, discovery_port=DISCOVERY_PORT, peer_port_range=PEER_PORT_RANGE):
         self.discovery_port = discovery_port
         self.peer_port_range = peer_port_range
         
@@ -87,7 +93,7 @@ class NetworkManager:
         """Listen for messages on main socket"""
         while self.running:
             try:
-                data, addr = self.socket.recvfrom(65536)
+                data, addr = self.socket.recvfrom(SOCKET_BUFFER_SIZE)
                 self._handle_message(data, addr)
             except Exception as e:
                 if self.running:  # Only log if we're supposed to be running
@@ -97,7 +103,7 @@ class NetworkManager:
         """Listen for discovery messages"""
         while self.running:
             try:
-                data, addr = self.discovery_socket.recvfrom(65536)
+                data, addr = self.discovery_socket.recvfrom(SOCKET_BUFFER_SIZE)
                 self._handle_message(data, addr)
             except Exception as e:
                 if self.running:  # Only log if we're supposed to be running
@@ -135,9 +141,9 @@ class NetworkManager:
         """Broadcast a discovery message"""
         try:
             encoded_data = Protocol.encode_message(message)
-            # Broadcast to local network
-            self.socket.sendto(encoded_data, ('255.255.255.255', self.discovery_port))
-            self.socket.sendto(encoded_data, ('127.0.0.1', self.discovery_port))
+            # Broadcast to local network using configured addresses
+            for address in BROADCAST_ADDRESSES:
+                self.socket.sendto(encoded_data, (address, self.discovery_port))
             return True
         except Exception as e:
             print(f"Error broadcasting discovery: {e}")

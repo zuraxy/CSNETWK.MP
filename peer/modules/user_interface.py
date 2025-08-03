@@ -1,12 +1,5 @@
-#!/usr/bin/env python3
-"""
-User Interface Module
-Handles user commands and interactions
-"""
-import os
-import base64
-import mimetypes
-
+# Add at top of file
+from peer.config.settings import DEFAULT_VERBOSE_MODE
 
 class UserInterface:
     """Handles user interaction and command processing"""
@@ -15,6 +8,9 @@ class UserInterface:
         self.message_handler = message_handler
         self.peer_manager = peer_manager
         self.running = False
+        
+        # Set default verbose mode from settings
+        self.message_handler.set_verbose_mode(DEFAULT_VERBOSE_MODE)
     
     def start_command_loop(self):
         """Start the main command processing loop"""

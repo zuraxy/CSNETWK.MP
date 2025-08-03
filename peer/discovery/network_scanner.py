@@ -1,72 +1,29 @@
 #!/usr/bin/env python3
 """
 Network Scanner Module
-Scans for active P2P peers on the network using UDP broadcasts
-Follows Single Responsibility Principle - only handles peer scanning
+Handles peer discovery via UDP broadcast
 """
 import socket
 import time
 import sys
 import os
 
-# Add parent directories to path for protocol access
+# Add parent directories to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from protocol.protocol import Protocol
-
+from peer.config.settings import DISCOVERY_PORT, DEFAULT_SCAN_TIMEOUT, SOCKET_BUFFER_SIZE, BROADCAST_ADDRESSES
 
 class NetworkScanner:
-    """
-    Handles scanning for P2P peers on the network
+    """Scans for active peers on the network"""
     
-    Responsibilities:
-    - Send discovery broadcasts
-    - Listen for peer responses
-    - Parse and validate peer information
-    - Track discovered peers
-    """
-    
-    def __init__(self, discovery_port=50999, scan_timeout=5.0):
+    def __init__(self, discovery_port=DISCOVERY_PORT, scan_timeout=DEFAULT_SCAN_TIMEOUT):
         self.discovery_port = discovery_port
         self.scan_timeout = scan_timeout
-        self.scanner_id = 'scanner@127.0.0.1'
         self.discovered_peers = []
-        
-    def scan_for_peers(self, verbose=True):
-        """
-        Scan for peers on the network
-        
-        Returns:
-            list: List of discovered peers with their information
-        """
-        if verbose:
-            print("Scanning for P2P peers...")
-        
-        self.discovered_peers = []
-        
-        # Create socket for discovery
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.settimeout(2.0)
-        
-        try:
-            # Send discovery broadcasts
-            self._send_discovery_broadcasts(sock, verbose)
-            
-            # Listen for responses
-            self._listen_for_responses(sock, verbose)
-            
-            # Display results
-            if verbose:
-                self._display_scan_results()
-            
-        except Exception as e:
-            if verbose:
-                print(f"Error during scan: {e}")
-        finally:
-            sock.close()
-            
-        return self.discovered_peers
+        self.scanner_id = f"scanner-{int(time.time())}"
+        self.scan_summary = {}
     
+    # When replacing this method:
     def _send_discovery_broadcasts(self, sock, verbose=True):
         """Send discovery broadcasts to find peers"""
         discovery_msg = {
@@ -79,18 +36,13 @@ class NetworkScanner:
         
         encoded = Protocol.encode_message(discovery_msg)
         
-        # Broadcast to different targets
-        targets = [
-            ('255.255.255.255', self.discovery_port),  # Broadcast
-            ('127.0.0.1', self.discovery_port)         # Local
-        ]
-        
-        for target_ip, target_port in targets:
+        # Use centralized broadcast addresses
+        for target_ip in BROADCAST_ADDRESSES:
             try:
-                sock.sendto(encoded, (target_ip, target_port))
+                sock.sendto(encoded, (target_ip, self.discovery_port))
             except Exception as e:
                 if verbose:
-                    print(f"Failed to send to {target_ip}:{target_port}: {e}")
+                    print(f"Failed to send to {target_ip}:{self.discovery_port}: {e}")
         
         if verbose:
             print("Discovery broadcast sent, listening for responses...")
@@ -101,7 +53,8 @@ class NetworkScanner:
         
         while time.time() - start_time < self.scan_timeout:
             try:
-                data, addr = sock.recvfrom(65536)
+                # Use the centralized buffer size
+                data, addr = sock.recvfrom(SOCKET_BUFFER_SIZE)
                 peer_info = self._parse_peer_response(data, addr)
                 
                 if peer_info and peer_info not in self.discovered_peers:

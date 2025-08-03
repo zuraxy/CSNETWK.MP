@@ -13,6 +13,7 @@ from peer.modules.network_manager import NetworkManager
 from peer.modules.peer_manager import PeerManager
 from peer.modules.message_handler import MessageHandler
 from peer.modules.user_interface import UserInterface
+from peer.config.settings import DEFAULT_VERBOSE_MODE
 
 
 class UDPPeerModular:
@@ -48,8 +49,11 @@ class UDPPeerModular:
             self.peer_manager.set_user_id(user_id)
             
             # Configure verbose mode
-            verbose_input = input("Enable verbose mode? (y/n, default=y): ").strip().lower()
-            verbose_mode = verbose_input != 'n'
+            verbose_input = input(f"Enable verbose mode? (y/n, default={'y' if DEFAULT_VERBOSE_MODE else 'n'}): ").strip().lower()
+            if verbose_input == '':
+                verbose_mode = DEFAULT_VERBOSE_MODE
+            else:
+                verbose_mode = verbose_input != 'n'
             self.message_handler.set_verbose_mode(verbose_mode)
             
             print(f"Verbose mode: {'ON' if verbose_mode else 'OFF'}")

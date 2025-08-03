@@ -5,6 +5,13 @@ Coordinates peer discovery operations and integrates connectivity testing with p
 Follows Facade Pattern - provides simplified interface to complex subsystems
 """
 import time
+import sys
+import os
+
+# Add parent directories to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from peer.config.settings import DISCOVERY_PORT, DEFAULT_SCAN_TIMEOUT
+
 from .connectivity_tester import ConnectivityTester
 from .network_scanner import NetworkScanner
 
@@ -20,7 +27,7 @@ class DiscoveryManager:
     - Handle discovery workflow orchestration
     """
     
-    def __init__(self, discovery_port=50999, scan_timeout=5.0):
+    def __init__(self, discovery_port=DISCOVERY_PORT, scan_timeout=DEFAULT_SCAN_TIMEOUT):
         self.connectivity_tester = ConnectivityTester()
         self.network_scanner = NetworkScanner(discovery_port, scan_timeout)
         self.last_discovery_time = None

@@ -16,6 +16,7 @@ import argparse
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from peer.discovery import DiscoveryManager
+from peer.config.settings import DISCOVERY_PORT, DEFAULT_SCAN_TIMEOUT
 
 
 def main():
@@ -37,10 +38,10 @@ Examples:
                         help='Run quick peer scan only (skip connectivity tests)')
     parser.add_argument('--connectivity', action='store_true',
                         help='Run connectivity tests only (skip peer scanning)')
-    parser.add_argument('--timeout', type=int, default=5,
-                        help='Peer scan timeout in seconds (default: 5)')
-    parser.add_argument('--port', type=int, default=50999,
-                        help='Discovery port (default: 50999)')
+    parser.add_argument('--timeout', type=int, default=DEFAULT_SCAN_TIMEOUT,
+                        help=f'Peer scan timeout in seconds (default: {DEFAULT_SCAN_TIMEOUT})')
+    parser.add_argument('--port', type=int, default=DISCOVERY_PORT,
+                        help=f'Discovery port (default: {DISCOVERY_PORT})')
     parser.add_argument('--quiet', action='store_true',
                         help='Minimal output mode')
     parser.add_argument('--export', choices=['json', 'summary'],

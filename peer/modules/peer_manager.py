@@ -6,14 +6,14 @@ Handles peer discovery, tracking, and management
 import time
 import threading
 import secrets
-
+from peer.config.settings import DISCOVERY_INTERVAL, PEER_TIMEOUT
 
 class PeerManager:
     """Manages peer discovery, tracking, and cleanup"""
     
-    def __init__(self, discovery_interval=30, peer_timeout=300):
-        self.discovery_interval = discovery_interval  # 30 seconds
-        self.peer_timeout = peer_timeout  # 5 minutes
+    def __init__(self, discovery_interval=DISCOVERY_INTERVAL, peer_timeout=PEER_TIMEOUT):
+        self.discovery_interval = discovery_interval
+        self.peer_timeout = peer_timeout
         
         # Peer storage
         self.known_peers = {}  # user_id -> {'ip': str, 'port': int, 'last_seen': timestamp}
