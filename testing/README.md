@@ -103,21 +103,26 @@ If you get import errors, ensure you're running from the correct directory:
 ### Running the Full Application
 After tests pass, run the full application:
 ```bash
-# From project root
-python run_server.py    # Start server
-python run_client.py    # Start client (in another terminal)
+# From project root - Modular P2P Architecture
+python run_peer.py          # Terminal 1
+python run_peer.py          # Terminal 2 
+python run_peer.py          # Terminal 3
+
+# Or use the alternative modular launcher
+python run_peer_modular.py  # Terminal 1
+python run_peer_modular.py  # Terminal 2
 ```
 
 ### Testing Features
-1. **POST Messages**: Test broadcasting to all clients
-2. **DM Messages**: Test direct messaging between specific clients
+1. **POST Messages**: Test broadcasting to all peers
+2. **DM Messages**: Test direct messaging between specific peers
 3. **PROFILE Updates**: Test profile creation with/without avatars
 4. **Verbose Modes**: Toggle between verbose and non-verbose display
-5. **User Lists**: Test online user listing functionality
+5. **User Lists**: Test online peer listing functionality
 
 ## Notes
 
-- All tests are standalone and don't require server/client to be running
+- All tests are standalone and don't require any external processes to be running
 - Tests use mock data and don't create network connections
 - Avatar tests use minimal PNG images for testing purposes
 - File paths are automatically resolved relative to script locations

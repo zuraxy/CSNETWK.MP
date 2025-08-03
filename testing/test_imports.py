@@ -19,7 +19,7 @@ def test_all_imports():
         return False
     
     try:
-        from peer.udp_peer import UDPPeer
+        from peer.udp_peer_modular import UDPPeerModular
         print("Peer import successful")
     except ImportError as e:
         print(f"Peer import failed: {e}")

@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def test_p2p_import():
     """Test that the P2P implementation can be imported"""
     try:
-        from peer.udp_peer import UDPPeer
+        from peer.udp_peer_modular import UDPPeerModular
         print("P2P implementation imports successfully")
         return True
     except ImportError as e:
@@ -32,9 +32,10 @@ def test_protocol_import():
 def test_peer_creation():
     """Test that a peer can be created"""
     try:
-        from peer.udp_peer import UDPPeer
-        peer = UDPPeer()
-        print(f"Peer created successfully on {peer.local_ip}:{peer.local_port}")
+        from peer.udp_peer_modular import UDPPeerModular
+        peer = UDPPeerModular()
+        network_info = peer.network_manager.get_network_info()
+        print(f"Peer created successfully on {network_info['local_ip']}:{network_info['local_port']}")
         return True
     except Exception as e:
         print(f"Failed to create peer: {e}")

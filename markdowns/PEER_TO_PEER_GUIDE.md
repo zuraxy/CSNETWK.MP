@@ -4,15 +4,19 @@
 
 You already have a **complete peer-to-peer (serverless) implementation**. The issue is that you've been editing the wrong files.
 
-## STOP Using These Files (Client-Server Architecture):
-- `client/udp_client.py` - OLD client implementation
-- `server/udp_server.py` - OLD server implementation  
-- `run_client.py` - OLD client launcher
-- `run_server.py` - OLD server launcher
+## ✅ Legacy Files Successfully Removed!
+These files have been completely removed from the codebase:
+- ~~`client/udp_client.py`~~ - Removed ✅
+- ~~`server/udp_server.py`~~ - Removed ✅
+- ~~`run_client.py`~~ - Removed ✅  
+- ~~`run_server.py`~~ - Removed ✅
+- ~~`peer/udp_peer.py`~~ - Replaced with modular version ✅
+- ~~`peer/discover_peers.py`~~ - Replaced with modular version ✅
 
-## START Using These Files (Peer-to-Peer Architecture):
-- `peer/udp_peer.py` - CORRECT P2P implementation
-- `run_peer.py` - CORRECT P2P launcher
+## NOW Using These Files (Modular P2P Architecture):
+- `peer/udp_peer_modular.py` - Modular P2P implementation
+- `run_peer.py` - Modular P2P launcher
+- `peer/discover_peers_modular.py` - Modular discovery tool
 - No server needed!
 
 ## How to Use the P2P System
@@ -107,15 +111,17 @@ python test_p2p.py
 **Your program IS ALREADY serverless and peer-to-peer!** 
 
 You just need to:
-1. **Stop using** `client/udp_client.py` and `server/udp_server.py`
-2. **Start using** `python run_peer.py` instead
+1. **Continue using** the clean modular implementation
+2. **Use** `python run_peer.py` for P2P communication
 3. **Run multiple instances** to test peer-to-peer communication
 
 The architecture you have meets all peer-to-peer requirements:
-- No central server required
-- Direct peer-to-peer communication
-- Automatic peer discovery
-- Distributed message routing
-- Self-healing network topology
+- No central server required ✅
+- Direct peer-to-peer communication ✅
+- Automatic peer discovery ✅
+- Distributed message routing ✅
+- Self-healing network topology ✅
+- Clean modular architecture ✅
+- All legacy code removed ✅
 
 **Just run `python run_peer.py` and you're good to go!** 🚀

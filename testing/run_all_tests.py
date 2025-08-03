@@ -63,7 +63,9 @@ def main():
             ("test_p2p.py", "Peer-to-Peer (P2P) Architecture Test"),
             ("test_verbose_mode.py", "Verbose Mode Display Simulation"),
             ("demo_verbose_modes.py", "Verbose vs Non-Verbose Mode Comparison"),
-            ("create_test_avatar.py", "Test Avatar Image Creation Utility")
+            ("create_test_avatar.py", "Test Avatar Image Creation Utility"),
+            ("test_modular_components.py", "Modular P2P Components Test"),
+            ("test_modular_discovery.py", "Modular Discovery Implementation Test")
         ]
         
         # Run each test
@@ -96,10 +98,13 @@ def main():
         
         print(f"\n[INFO] Next Steps:")
         print("1. Start peer(s): python ../run_peer.py (in multiple terminals)")
-        print("2. Test peer discovery: python ../peer/discover_peers.py")
-        print("3. Test the full P2P application with multiple peers")
-        print("4. Try both verbose and non-verbose modes")
-        print("5. No server needed - fully peer-to-peer architecture!")
+        print("2. Test peer discovery: python ../peer/discover_peers_modular.py")
+        print("3. Test modular discovery: python ../peer/discover_peers_modular.py")
+        print("4. Compare implementations: python compare_implementations.py")
+        print("5. Compare discovery implementations: python compare_discovery_implementations.py")
+        print("6. Test the full P2P application with multiple peers")
+        print("7. Try both verbose and non-verbose modes")
+        print("8. No server needed - fully peer-to-peer architecture!")
         
     finally:
         # Change back to original directory

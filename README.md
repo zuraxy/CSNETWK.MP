@@ -7,11 +7,11 @@
 ## 🚨 IMPORTANT: This is a P2P System!
 - **USE**: `python run_peer.py` for peer-to-peer communication
 - 🔗 **No server needed**: Peers communicate directly with each other
-- 🗑️ **Cleaned up**: Removed legacy client-server files
+- 🗑️ **Cleaned up**: Removed all legacy monolithic and client-server implementations
 
 ## Quick Start
 
-### Start Multiple Peers
+### Modular Implementation (Clean Architecture)
 ```bash
 # Terminal 1
 python run_peer.py
@@ -23,24 +23,60 @@ python run_peer.py
 python run_peer.py
 ```
 
+### Alternative Modular Launcher
+```bash
+# Terminal 1
+python run_peer_modular.py
+
+# Terminal 2  
+python run_peer_modular.py
+
+# Terminal 3
+python run_peer_modular.py
+```
+
 ### Test Peer Discovery
 ```bash
-python peer/discover_peers.py
+python peer/discover_peers_modular.py
 ```
 
 ### Run All Tests
 ```bash
 cd testing
 python run_all_tests.py
+python test_modular_components.py
+python compare_implementations.py
 ```
 
 ## Architecture
 
-This implementation uses a **peer-to-peer (P2P) architecture** where:
+This implementation uses a **clean modular architecture** with separated concerns:
+
+### Modular Implementation (`run_peer.py`) ⭐ **Production Ready**
+- **Separated concerns**: 4 specialized modules  
+- **Maintainable**: Easy to test, debug, and extend
+- **Production-ready**: Clean architecture patterns
 - **No central server** required
 - **Direct peer communication** 
 - **Automatic peer discovery** via UDP broadcast
 - **Self-healing network** with timeout handling
+
+### Modular Architecture Overview
+```
+UDPPeerModular
+├── NetworkManager     # UDP sockets, broadcasting, communication
+├── PeerManager        # Peer discovery, tracking, profiles  
+├── MessageHandler     # Message processing, routing, sending
+└── UserInterface      # Commands, input handling, display
+```
+
+### Discovery System Architecture
+```
+DiscoveryManager
+├── ConnectivityTester # Network connectivity testing
+├── NetworkScanner     # Peer discovery and scanning
+└── CLI Interface      # Rich command-line options
+```
 
 ## Features
 
@@ -129,29 +165,42 @@ Profile updated and broadcasted to 3 peers
 ### Active P2P Implementation
 ```
 peer/
-├── udp_peer.py          # Main P2P peer implementation
-├── discover_peers.py    # Peer discovery utility
+├── udp_peer_modular.py      # Modular P2P peer implementation
+├── discover_peers_modular.py # Modular peer discovery utility
+├── modules/                 # Core P2P modules
+│   ├── network_manager.py   # Network layer
+│   ├── peer_manager.py      # Peer management
+│   ├── message_handler.py   # Message processing
+│   └── user_interface.py    # User interaction
+├── discovery/               # Discovery system modules
+│   ├── connectivity_tester.py
+│   ├── network_scanner.py
+│   └── discovery_manager.py
 └── __init__.py
 
 protocol/
-├── protocol.py          # Message encoding/decoding
+├── protocol.py              # Message encoding/decoding
 └── __init__.py
 
 testing/
-├── test_p2p.py         # P2P-specific tests
-├── test_*.py           # Updated existing tests
-└── run_all_tests.py    # Test runner
+├── test_modular_*.py       # Modular architecture tests
+├── test_*.py               # Feature tests
+└── run_all_tests.py        # Test runner
 
-run_peer.py             # Peer launcher
-P2P_ARCHITECTURE.md     # Detailed P2P documentation
+run_peer.py                 # Main peer launcher (modular)
+run_peer_modular.py         # Alternative modular launcher
+markdowns/                  # Comprehensive documentation
 ```
 
-### Legacy Files (Not Used in P2P Mode)
+### ✅ Legacy Files Completely Removed
 ```
-server/                 # ⚠️ Legacy client-server code
-client/                 # ⚠️ Legacy client-server code  
-run_server.py          # ⚠️ Not needed in P2P
-run_client.py          # ⚠️ Not needed in P2P
+All legacy monolithic and client-server files have been removed:
+✅ No server/ directory
+✅ No client/ directory  
+✅ No run_server.py
+✅ No run_client.py
+✅ No monolithic implementations
+✅ Clean modular architecture only
 ```
 
 ## Protocol Messages
@@ -176,8 +225,8 @@ python run_all_tests.py
 
 ### Manual Testing
 ```bash
-# Test peer discovery
-python peer/discover_peers.py
+# Test modular peer discovery
+python peer/discover_peers_modular.py
 
 # Start multiple peers in different terminals
 python run_peer.py  # Repeat in multiple terminals
@@ -198,7 +247,7 @@ python run_peer.py  # Repeat in multiple terminals
 ### Peers Not Discovering Each Other
 - Check firewall settings (allow UDP broadcast)
 - Ensure peers are on same network
-- Run discovery tool: `python peer/discover_peers.py`
+- Run discovery tool: `python peer/discover_peers_modular.py`
 
 ### Messages Not Delivered
 - Use `LIST` command to verify peer discovery
