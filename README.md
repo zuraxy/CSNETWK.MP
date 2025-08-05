@@ -48,6 +48,24 @@ python test_modular_components.py
 python compare_implementations.py
 ```
 
+## Quick Start
+
+### Method 1: PowerShell (Recommended)
+```powershell
+cd "C:\Users\Zurax\Github.Repositories\CSNETWK.MP"
+& "C:/Users/Zurax/AppData/Local/Programs/Python/Python313/python.exe" fully_working_textual_ui.py
+```
+
+### Method 2: Batch File
+```cmd
+run_textual_ui.bat
+```
+
+### Method 3: Python Launcher
+```powershell
+py fully_working_textual_ui.py
+```
+
 ## Architecture
 
 This implementation uses a **clean modular architecture** with separated concerns:

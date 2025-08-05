@@ -1,0 +1,232 @@
+/* Textual UI Styles for P2P Chat */
+
+/* Setup Screen Styles */
+.setup-container {
+    margin: 10;
+    padding: 5;
+    border: heavy green;
+    background: $surface;
+    align: center middle;
+}
+
+.setup-title {
+    text-align: center;
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 2;
+}
+
+.setup-subtitle {
+    text-align: center;
+    color: $text-muted;
+    margin-bottom: 3;
+}
+
+.setup-input {
+    margin: 1 0;
+    width: 50;
+}
+
+.setup-options {
+    margin: 2 0;
+    align: center middle;
+}
+
+.setup-buttons {
+    margin: 3 0;
+    align: center middle;
+}
+
+.verbose-indicator {
+    margin: 0 2;
+    padding: 0 1;
+    background: $primary;
+    color: $text;
+}
+
+/* Main Application Styles */
+.main-grid {
+    grid-size: 2 3;
+    grid-columns: 1fr 300;
+    grid-rows: 1fr auto auto;
+}
+
+.chat-area {
+    column-span: 1;
+    row-span: 1;
+    border: solid $primary;
+    padding: 1;
+    scrollbar-gutter: stable;
+}
+
+.peer-list {
+    column-span: 1;
+    row-span: 2;
+    border: solid $secondary;
+    padding: 1;
+    background: $surface-lighten-1;
+}
+
+.command-area {
+    column-span: 1;
+    row-span: 1;
+    border: solid $accent;
+    padding: 1;
+    background: $surface;
+}
+
+.status-bar {
+    column-span: 2;
+    row-span: 1;
+    background: $primary;
+    color: $text;
+    padding: 0 2;
+    height: 3;
+}
+
+/* Component Styles */
+.command-buttons {
+    margin-bottom: 1;
+    height: 3;
+}
+
+.command-buttons Button {
+    margin-right: 1;
+}
+
+.message {
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+.section-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+    text-align: center;
+    background: $surface-lighten-2;
+    padding: 1;
+}
+
+.peer-list Static {
+    color: $text;
+    padding: 0 1;
+}
+
+.status-item {
+    margin-right: 3;
+    padding: 0 1;
+}
+
+/* Dialog Styles */
+.profile-dialog, .dm-dialog {
+    margin: 5;
+    padding: 3;
+    border: heavy $accent;
+    background: $surface;
+    display: none;
+    align: center middle;
+    width: 60%;
+    height: auto;
+}
+
+.dialog-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 2;
+    text-align: center;
+}
+
+.dialog-buttons {
+    margin-top: 2;
+    align: center middle;
+}
+
+.dialog-buttons Button {
+    margin: 0 1;
+}
+
+.peer-list-label {
+    margin-bottom: 1;
+    color: $text-muted;
+    text-style: italic;
+}
+
+/* Message Type Specific Styles */
+.message-post {
+    border-left: thick $success;
+    padding-left: 2;
+}
+
+.message-dm {
+    border-left: thick $warning;
+    padding-left: 2;
+    background: $surface-lighten-1;
+}
+
+.message-system {
+    border-left: thick $primary;
+    padding-left: 2;
+    color: $text-muted;
+}
+
+.message-peer_join {
+    border-left: thick $success;
+    padding-left: 2;
+    color: $success;
+}
+
+.message-peer_leave {
+    border-left: thick $error;
+    padding-left: 2;
+    color: $error;
+}
+
+/* Input Styles */
+Input {
+    border: solid $primary;
+}
+
+Input:focus {
+    border: solid $accent;
+}
+
+/* Button Styles */
+Button {
+    margin: 0 1;
+}
+
+Button.-primary {
+    background: $primary;
+    color: $text;
+}
+
+Button.-default {
+    background: $surface;
+    color: $text;
+    border: solid $primary;
+}
+
+Button.-error {
+    background: $error;
+    color: $text;
+}
+
+/* Scrollbar Styles */
+ScrollView > .scrollbar {
+    background: $surface-lighten-1;
+}
+
+ScrollView > .scrollbar:hover {
+    background: $surface-lighten-2;
+}
+
+/* Animation and Transitions */
+.fade-in {
+    transition: opacity 300ms;
+    opacity: 0;
+}
+
+.fade-in.visible {
+    opacity: 1;
+}
