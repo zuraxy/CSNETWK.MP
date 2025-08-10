@@ -998,6 +998,8 @@ class MessageHandler:
             chunk_number = int(chunk_number)
             total_chunks = int(total_chunks)
             
+            print(f"Debug: Received chunk {chunk_number}/{total_chunks}, data length: {len(chunk_data)}")
+            
             # Initialize receiving file structure if needed
             if transfer_id not in self.receiving_files:
                 self.receiving_files[transfer_id] = {
@@ -1006,6 +1008,7 @@ class MessageHandler:
                     'received_count': 0,
                     'sender_addr': addr
                 }
+                print(f"Debug: Initialized receiving structure for {transfer_id}")
             
             # Store the chunk
             if chunk_number not in self.receiving_files[transfer_id]['chunks']:
@@ -1017,7 +1020,10 @@ class MessageHandler:
                 
                 # Check if all chunks received
                 if received == total_chunks:
+                    print(f"Debug: All chunks received, reassembling file...")
                     self._reassemble_file(transfer_id)
+            else:
+                print(f"Debug: Chunk {chunk_number} already received, skipping")
             
         except Exception as e:
             print(f"{Colors.RED}Error handling file chunk: {e}{Colors.RESET}")
@@ -1067,11 +1073,13 @@ class MessageHandler:
             
             # Reassemble file data
             file_data = b''
+            print(f"Debug: Reassembling {total_chunks} chunks...")
             for i in range(total_chunks):
                 if i in chunks:
                     try:
                         chunk_bytes = base64.b64decode(chunks[i])
                         file_data += chunk_bytes
+                        print(f"Debug: Chunk {i} decoded: {len(chunk_bytes)} bytes")
                     except Exception as e:
                         print(f"{Colors.RED}Error decoding chunk {i}: {e}{Colors.RESET}")
                         self._send_file_received(transfer_id, sender_addr, 'decode_error')
@@ -1080,6 +1088,9 @@ class MessageHandler:
                     print(f"{Colors.RED}Missing chunk {i}, cannot reassemble file{Colors.RESET}")
                     self._send_file_received(transfer_id, sender_addr, 'missing_chunks')
                     return
+            
+            print(f"Debug: Total reassembled file size: {len(file_data)} bytes")
+            print(f"Debug: File data preview: {file_data[:50]}...")
             
             # Save file to downloads directory
             downloads_dir = os.path.join(os.getcwd(), 'downloads')
@@ -1147,6 +1158,9 @@ class MessageHandler:
             transfer_id = msg_dict.get('transfer_id')
             receiver_name = msg_dict.get('receiver_name', f"Unknown@{addr[0]}")
             
+            print(f"Debug: Received FILE_ACCEPT for transfer {transfer_id}")
+            print(f"Debug: Active transfers: {list(self.active_file_transfers.keys())}")
+            
             if transfer_id not in self.active_file_transfers:
                 print(f"{Colors.RED}Error: Transfer {transfer_id} not found{Colors.RESET}")
                 return
@@ -1198,8 +1212,12 @@ class MessageHandler:
         try:
             chunk_size = 64 * 1024  # 64KB chunks
             
+            print(f"Debug: Reading file from path: {file_path}")
             with open(file_path, 'rb') as f:
                 file_data = f.read()
+            
+            print(f"Debug: File data length: {len(file_data)} bytes")
+            print(f"Debug: File data preview: {file_data[:50]}...")
             
             # Calculate chunks
             total_chunks = (len(file_data) + chunk_size - 1) // chunk_size
@@ -1210,6 +1228,8 @@ class MessageHandler:
                 start = chunk_num * chunk_size
                 end = min(start + chunk_size, len(file_data))
                 chunk_data = file_data[start:end]
+                
+                print(f"Debug: Chunk {chunk_num}: {len(chunk_data)} bytes")
                 
                 # Encode chunk as base64
                 chunk_b64 = base64.b64encode(chunk_data).decode('utf-8')

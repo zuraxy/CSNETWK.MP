@@ -675,6 +675,9 @@ class UserInterface:
             transfer_id = f"file_{self.message_handler.file_transfer_counter}_{int(time.time())}"
             self.message_handler.file_transfer_counter += 1
             
+            print(f"Debug: Generated transfer ID: {transfer_id}")
+            print(f"Debug: Active transfers before: {list(self.message_handler.active_file_transfers.keys())}")
+            
             # Store transfer info
             self.message_handler.active_file_transfers[transfer_id] = {
                 'filename': filename,
@@ -685,6 +688,8 @@ class UserInterface:
                 'target_peer': target_peer,
                 'status': 'offering'
             }
+            
+            print(f"Debug: Active transfers after: {list(self.message_handler.active_file_transfers.keys())}")
             
             # Send offer message
             msg_dict = {
