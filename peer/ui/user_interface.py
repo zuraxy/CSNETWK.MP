@@ -6,6 +6,7 @@ Handles user interaction and command processing
 import os
 import base64
 import mimetypes
+import time
 
 # Add at top of file
 from peer.config.settings import DEFAULT_VERBOSE_MODE
@@ -24,13 +25,13 @@ class UserInterface:
     def start_command_loop(self):
         """Start the main command processing loop"""
         print(f"\nPeer-to-Peer Chat Ready!")
-        print(f"Commands: POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, VERBOSE, QUIT")
+        print(f"Commands: POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, FILE, VERBOSE, QUIT")
         print(f"Verbose mode: {'ON' if self.message_handler.verbose_mode else 'OFF'}")
         
         self.running = True
         while self.running:
             try:
-                original_cmd = input("\nCommand (POST/DM/PROFILE/LIST/FOLLOW/UNFOLLOW/FOLLOWING/FOLLOWERS/GAME/VERBOSE/QUIT): ").strip()
+                original_cmd = input("\nCommand (POST/DM/PROFILE/LIST/FOLLOW/UNFOLLOW/FOLLOWING/FOLLOWERS/GAME/FILE/VERBOSE/QUIT): ").strip()
                 cmd = original_cmd.upper()
                 
                 if cmd == "QUIT" or cmd == "Q":
@@ -56,11 +57,13 @@ class UserInterface:
                     self._handle_followers_command()
                 elif cmd.startswith("GAME") or cmd == "G":
                     self._handle_game_command(original_cmd)
+                elif cmd.startswith("FILE") or cmd == "FILE":
+                    self._handle_file_command(original_cmd)
                 elif cmd == "":
                     # Empty command, just continue
                     continue
                 else:
-                    print("Invalid command. Use POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, VERBOSE, or QUIT")
+                    print("Invalid command. Use POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, FILE, VERBOSE, or QUIT")
                     print("You can also use single letters: P, D, L, F, UF, G, V, Q")
                     
             except KeyboardInterrupt:
@@ -473,3 +476,244 @@ class UserInterface:
                     print(f"Waiting for {opponent_name} ({opponent_symbol}) to play...")
         else:
             print("Error: Could not send move")
+
+    def _handle_file_command(self, original_cmd):
+        """Handle FILE command and its subcommands"""
+        # Parse the command
+        parts = original_cmd.split()
+        
+        if len(parts) == 1:  # Just "FILE"
+            print("FILE command usage:")
+            print("  FILE SEND <user@ip> <file_path> [description]  - Send a file to a peer")
+            print("  FILE ACCEPT <transfer_id>                      - Accept an incoming file offer")
+            print("  FILE REJECT <transfer_id>                      - Reject an incoming file offer")
+            print("  FILE LIST                                      - List pending file offers")
+            print("  FILE STATUS                                    - Show active file transfers")
+            return
+        
+        subcommand = parts[1].upper()
+        
+        if subcommand == "SEND":
+            self._handle_file_send_command(parts)
+        elif subcommand == "ACCEPT":
+            self._handle_file_accept_command(parts)
+        elif subcommand == "REJECT":
+            self._handle_file_reject_command(parts)
+        elif subcommand == "LIST":
+            self._handle_file_list_command()
+        elif subcommand == "STATUS":
+            self._handle_file_status_command()
+        else:
+            print("Invalid FILE subcommand. Use SEND, ACCEPT, REJECT, LIST, or STATUS")
+    
+    def _handle_file_send_command(self, parts):
+        """Handle FILE SEND command"""
+        if len(parts) < 4:
+            print("Usage: FILE SEND <user@ip> <file_path> [description]")
+            return
+        
+        target = parts[2]
+        file_path = parts[3]
+        description = " ".join(parts[4:]) if len(parts) > 4 else "No description"
+        
+        # Validate file path
+        if not os.path.exists(file_path):
+            print(f"Error: File '{file_path}' not found")
+            return
+        
+        if not os.path.isfile(file_path):
+            print(f"Error: '{file_path}' is not a file")
+            return
+        
+        # Get file info
+        file_size = os.path.getsize(file_path)
+        filename = os.path.basename(file_path)
+        file_type, _ = mimetypes.guess_type(file_path)
+        if not file_type:
+            file_type = "application/octet-stream"
+        
+        # Check file size limit (50MB)
+        max_size = 50 * 1024 * 1024  # 50MB
+        if file_size > max_size:
+            print(f"Error: File too large ({self._format_file_size(file_size)}). Maximum size is 50MB")
+            return
+        
+        # Parse target
+        try:
+            target_peer = self.peer_manager.find_peer_by_handle(target)
+            if target_peer:
+                self._send_file_offer(target_peer, file_path, filename, file_size, file_type, description)
+            else:
+                print(f"Error: Peer '{target}' not found or not online")
+        except Exception as e:
+            print(f"Error sending file: {e}")
+    
+    def _handle_file_accept_command(self, parts):
+        """Handle FILE ACCEPT command"""
+        if len(parts) != 3:
+            print("Usage: FILE ACCEPT <transfer_id>")
+            return
+        
+        transfer_id = parts[2]
+        
+        if transfer_id not in self.message_handler.pending_file_offers:
+            print(f"Error: No pending file offer with ID '{transfer_id}'")
+            return
+        
+        offer_info = self.message_handler.pending_file_offers[transfer_id]
+        print(f"Accepting file '{offer_info['filename']}' from {offer_info['sender_name']}")
+        
+        # Mark as accepting - the sender will start sending chunks
+        self.message_handler.receiving_files[transfer_id] = {
+            'chunks': {},
+            'total_chunks': 0,
+            'received_count': 0,
+            'sender_addr': offer_info['sender_addr']
+        }
+        
+        # Send acceptance message back to sender
+        try:
+            msg_dict = {
+                'type': 'FILE_ACCEPT',
+                'transfer_id': transfer_id,
+                'receiver_name': self.message_handler.peer_manager.get_self_info().get('name', 'Unknown')
+            }
+            self.message_handler.network_manager.send_message(msg_dict, offer_info['sender_addr'])
+            print(f"File acceptance sent. Waiting for file chunks...")
+        except Exception as e:
+            print(f"Error sending acceptance: {e}")
+    
+    def _handle_file_reject_command(self, parts):
+        """Handle FILE REJECT command"""
+        if len(parts) != 3:
+            print("Usage: FILE REJECT <transfer_id>")
+            return
+        
+        transfer_id = parts[2]
+        
+        if transfer_id not in self.message_handler.pending_file_offers:
+            print(f"Error: No pending file offer with ID '{transfer_id}'")
+            return
+        
+        offer_info = self.message_handler.pending_file_offers[transfer_id]
+        print(f"Rejecting file '{offer_info['filename']}' from {offer_info['sender_name']}")
+        
+        # Send rejection message back to sender
+        try:
+            msg_dict = {
+                'type': 'FILE_REJECT',
+                'transfer_id': transfer_id,
+                'receiver_name': self.message_handler.peer_manager.get_self_info().get('name', 'Unknown')
+            }
+            self.message_handler.network_manager.send_message(msg_dict, offer_info['sender_addr'])
+            
+            # Remove from pending offers
+            del self.message_handler.pending_file_offers[transfer_id]
+            print("File rejection sent.")
+        except Exception as e:
+            print(f"Error sending rejection: {e}")
+    
+    def _handle_file_list_command(self):
+        """Handle FILE LIST command"""
+        pending = self.message_handler.pending_file_offers
+        
+        if not pending:
+            print("No pending file offers")
+            return
+        
+        print(f"\nPending File Offers ({len(pending)}):")
+        print("-" * 80)
+        for transfer_id, offer in pending.items():
+            print(f"ID: {transfer_id}")
+            print(f"  From: {offer['sender_name']}")
+            print(f"  File: {offer['filename']}")
+            print(f"  Size: {self._format_file_size(offer['file_size'])}")
+            print(f"  Type: {offer['file_type']}")
+            print(f"  Description: {offer['description']}")
+            print(f"  Time: {self._format_timestamp(offer['timestamp'])}")
+            print()
+    
+    def _handle_file_status_command(self):
+        """Handle FILE STATUS command"""
+        active_transfers = self.message_handler.active_file_transfers
+        receiving = self.message_handler.receiving_files
+        
+        if not active_transfers and not receiving:
+            print("No active file transfers")
+            return
+        
+        if active_transfers:
+            print(f"\nOutgoing Transfers ({len(active_transfers)}):")
+            print("-" * 50)
+            for transfer_id, transfer in active_transfers.items():
+                print(f"ID: {transfer_id}")
+                print(f"  File: {transfer['filename']}")
+                print(f"  To: {transfer.get('receiver_name', 'Unknown')}")
+                print(f"  Status: {transfer.get('status', 'In progress')}")
+                print()
+        
+        if receiving:
+            print(f"\nIncoming Transfers ({len(receiving)}):")
+            print("-" * 50)
+            for transfer_id, transfer in receiving.items():
+                total = transfer['total_chunks']
+                received = transfer['received_count']
+                progress = (received / total * 100) if total > 0 else 0
+                print(f"ID: {transfer_id}")
+                print(f"  Progress: {received}/{total} chunks ({progress:.1f}%)")
+                print()
+    
+    def _send_file_offer(self, target_peer, file_path, filename, file_size, file_type, description):
+        """Send a file offer to a peer"""
+        try:
+            # Generate transfer ID
+            transfer_id = f"file_{self.message_handler.file_transfer_counter}_{int(time.time())}"
+            self.message_handler.file_transfer_counter += 1
+            
+            # Store transfer info
+            self.message_handler.active_file_transfers[transfer_id] = {
+                'filename': filename,
+                'file_path': file_path,
+                'file_size': file_size,
+                'file_type': file_type,
+                'description': description,
+                'target_peer': target_peer,
+                'status': 'offering'
+            }
+            
+            # Send offer message
+            msg_dict = {
+                'type': 'FILE_OFFER',
+                'transfer_id': transfer_id,
+                'filename': filename,
+                'file_size': str(file_size),
+                'file_type': file_type,
+                'description': description,
+                'sender_name': self.message_handler.peer_manager.get_self_info().get('name', 'Unknown')
+            }
+            
+            self.message_handler.network_manager.send_message(msg_dict, target_peer['addr'])
+            print(f"📤 File offer sent to {target_peer.get('name', 'Unknown')} ({target_peer['addr'][0]})")
+            print(f"File: {filename} ({self._format_file_size(file_size)})")
+            print(f"Transfer ID: {transfer_id}")
+            print("Waiting for response...")
+            
+        except Exception as e:
+            print(f"Error sending file offer: {e}")
+    
+    def _format_file_size(self, size_bytes):
+        """Format file size in human readable format"""
+        if size_bytes == 0:
+            return "0 B"
+        size_names = ["B", "KB", "MB", "GB"]
+        i = 0
+        while size_bytes >= 1024.0 and i < len(size_names) - 1:
+            size_bytes /= 1024.0
+            i += 1
+        return f"{size_bytes:.1f} {size_names[i]}"
+    
+    def _format_timestamp(self, timestamp):
+        """Format timestamp for display"""
+        import datetime
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")

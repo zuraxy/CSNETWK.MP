@@ -9,6 +9,7 @@ import json
 import sys
 import os
 import datetime
+import base64
 
 # Add parent directories to path for protocol access
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -51,10 +52,23 @@ class MessageHandler:
         self.network_manager.register_message_handler('TICTACTOE_MOVE', self.handle_tictactoe_move)
         self.network_manager.register_message_handler('TICTACTOE_RESULT', self.handle_tictactoe_result)
         
+        # File transfer message handlers
+        self.network_manager.register_message_handler('FILE_OFFER', self.handle_file_offer)
+        self.network_manager.register_message_handler('FILE_CHUNK', self.handle_file_chunk)
+        self.network_manager.register_message_handler('FILE_RECEIVED', self.handle_file_received)
+        self.network_manager.register_message_handler('FILE_ACCEPT', self.handle_file_accept)
+        self.network_manager.register_message_handler('FILE_REJECT', self.handle_file_reject)
+        
         # Game state storage
         self.active_games = {}  # game_id -> game_state
         self.game_counter = 0  # Counter for generating game IDs
         self.pending_invitations = {}  # game_id -> invitation_info
+        
+        # File transfer state storage
+        self.active_file_transfers = {}  # transfer_id -> transfer_state
+        self.file_transfer_counter = 0  # Counter for generating transfer IDs
+        self.pending_file_offers = {}  # transfer_id -> offer_info
+        self.receiving_files = {}  # transfer_id -> received_chunks
     
     def set_verbose_mode(self, verbose):
         """Set verbose mode for message display"""
@@ -927,6 +941,298 @@ class MessageHandler:
         print("   |   |   ")
         print(f" {colorize_cell(board[6])} | {colorize_cell(board[7])} | {colorize_cell(board[8])} ")
         print("   |   |   ")
+    
+    # File Transfer Methods
+    def handle_file_offer(self, msg_dict, addr):
+        """Handle FILE_OFFER message"""
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            filename = msg_dict.get('filename')
+            file_size = msg_dict.get('file_size')
+            file_type = msg_dict.get('file_type', 'unknown')
+            description = msg_dict.get('description', 'No description')
+            sender_name = msg_dict.get('sender_name', f"Unknown@{addr[0]}")
+            
+            if not all([transfer_id, filename, file_size]):
+                print(f"{Colors.RED}Error: Invalid file offer received{Colors.RESET}")
+                return
+            
+            # Store the file offer
+            self.pending_file_offers[transfer_id] = {
+                'filename': filename,
+                'file_size': int(file_size),
+                'file_type': file_type,
+                'description': description,
+                'sender_name': sender_name,
+                'sender_addr': addr,
+                'timestamp': time.time()
+            }
+            
+            print(f"\n{Colors.CYAN}📁 File Offer Received!{Colors.RESET}")
+            print(f"From: {Colors.YELLOW}{sender_name}{Colors.RESET}")
+            print(f"File: {Colors.BLUE}{filename}{Colors.RESET}")
+            print(f"Size: {self._format_file_size(int(file_size))}")
+            print(f"Type: {file_type}")
+            print(f"Description: {description}")
+            print(f"Transfer ID: {transfer_id}")
+            print(f"Use 'FILE ACCEPT {transfer_id}' to accept or 'FILE REJECT {transfer_id}' to reject")
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file offer: {e}{Colors.RESET}")
+    
+    def handle_file_chunk(self, msg_dict, addr):
+        """Handle FILE_CHUNK message"""
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            chunk_number = msg_dict.get('chunk_number')
+            total_chunks = msg_dict.get('total_chunks')
+            chunk_data = msg_dict.get('chunk_data')
+            
+            if not all([transfer_id, chunk_number is not None, total_chunks, chunk_data]):
+                print(f"{Colors.RED}Error: Invalid file chunk received{Colors.RESET}")
+                return
+            
+            chunk_number = int(chunk_number)
+            total_chunks = int(total_chunks)
+            
+            # Initialize receiving file structure if needed
+            if transfer_id not in self.receiving_files:
+                self.receiving_files[transfer_id] = {
+                    'chunks': {},
+                    'total_chunks': total_chunks,
+                    'received_count': 0,
+                    'sender_addr': addr
+                }
+            
+            # Store the chunk
+            if chunk_number not in self.receiving_files[transfer_id]['chunks']:
+                self.receiving_files[transfer_id]['chunks'][chunk_number] = chunk_data
+                self.receiving_files[transfer_id]['received_count'] += 1
+                
+                received = self.receiving_files[transfer_id]['received_count']
+                print(f"{Colors.CYAN}Receiving chunk {chunk_number + 1}/{total_chunks} ({received}/{total_chunks} total){Colors.RESET}")
+                
+                # Check if all chunks received
+                if received == total_chunks:
+                    self._reassemble_file(transfer_id)
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file chunk: {e}{Colors.RESET}")
+    
+    def handle_file_received(self, msg_dict, addr):
+        """Handle FILE_RECEIVED confirmation"""
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            status = msg_dict.get('status')
+            receiver_name = msg_dict.get('receiver_name', f"Unknown@{addr[0]}")
+            
+            if transfer_id in self.active_file_transfers:
+                transfer_info = self.active_file_transfers[transfer_id]
+                filename = transfer_info.get('filename', 'unknown file')
+                
+                if status == 'success':
+                    print(f"\n{Colors.GREEN}✅ File transfer completed!{Colors.RESET}")
+                    print(f"File '{Colors.BLUE}{filename}{Colors.RESET}' successfully received by {Colors.YELLOW}{receiver_name}{Colors.RESET}")
+                else:
+                    print(f"\n{Colors.RED}❌ File transfer failed!{Colors.RESET}")
+                    print(f"File '{Colors.BLUE}{filename}{Colors.RESET}' transfer to {Colors.YELLOW}{receiver_name}{Colors.RESET} failed: {status}")
+                
+                # Clean up transfer state
+                del self.active_file_transfers[transfer_id]
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file received confirmation: {e}{Colors.RESET}")
+    
+    def _reassemble_file(self, transfer_id):
+        """Reassemble file from chunks and save to disk"""
+        try:
+            if transfer_id not in self.receiving_files:
+                return
+            
+            file_info = self.receiving_files[transfer_id]
+            chunks = file_info['chunks']
+            total_chunks = file_info['total_chunks']
+            sender_addr = file_info['sender_addr']
+            
+            # Get file offer info
+            if transfer_id not in self.pending_file_offers:
+                print(f"{Colors.RED}Error: File offer info not found for transfer {transfer_id}{Colors.RESET}")
+                return
+            
+            offer_info = self.pending_file_offers[transfer_id]
+            filename = offer_info['filename']
+            
+            # Reassemble file data
+            file_data = b''
+            for i in range(total_chunks):
+                if i in chunks:
+                    try:
+                        chunk_bytes = base64.b64decode(chunks[i])
+                        file_data += chunk_bytes
+                    except Exception as e:
+                        print(f"{Colors.RED}Error decoding chunk {i}: {e}{Colors.RESET}")
+                        self._send_file_received(transfer_id, sender_addr, 'decode_error')
+                        return
+                else:
+                    print(f"{Colors.RED}Missing chunk {i}, cannot reassemble file{Colors.RESET}")
+                    self._send_file_received(transfer_id, sender_addr, 'missing_chunks')
+                    return
+            
+            # Save file to downloads directory
+            downloads_dir = os.path.join(os.getcwd(), 'downloads')
+            os.makedirs(downloads_dir, exist_ok=True)
+            
+            # Handle filename conflicts
+            file_path = os.path.join(downloads_dir, filename)
+            counter = 1
+            base_name, ext = os.path.splitext(filename)
+            while os.path.exists(file_path):
+                new_filename = f"{base_name}_{counter}{ext}"
+                file_path = os.path.join(downloads_dir, new_filename)
+                counter += 1
+            
+            # Write file
+            with open(file_path, 'wb') as f:
+                f.write(file_data)
+            
+            print(f"\n{Colors.GREEN}📁 File saved successfully!{Colors.RESET}")
+            print(f"Location: {Colors.BLUE}{file_path}{Colors.RESET}")
+            print(f"Size: {self._format_file_size(len(file_data))}")
+            
+            # Send confirmation
+            self._send_file_received(transfer_id, sender_addr, 'success')
+            
+            # Clean up
+            del self.receiving_files[transfer_id]
+            del self.pending_file_offers[transfer_id]
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error reassembling file: {e}{Colors.RESET}")
+            if transfer_id in self.receiving_files:
+                sender_addr = self.receiving_files[transfer_id]['sender_addr']
+                self._send_file_received(transfer_id, sender_addr, 'write_error')
+    
+    def _send_file_received(self, transfer_id, addr, status):
+        """Send FILE_RECEIVED confirmation message"""
+        try:
+            msg_dict = {
+                'type': 'FILE_RECEIVED',
+                'transfer_id': transfer_id,
+                'status': status,
+                'receiver_name': self.peer_manager.get_self_info().get('name', 'Unknown')
+            }
+            
+            self.network_manager.send_message(msg_dict, addr)
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error sending file received confirmation: {e}{Colors.RESET}")
+    
+    def _format_file_size(self, size_bytes):
+        """Format file size in human readable format"""
+        if size_bytes == 0:
+            return "0 B"
+        size_names = ["B", "KB", "MB", "GB"]
+        i = 0
+        while size_bytes >= 1024.0 and i < len(size_names) - 1:
+            size_bytes /= 1024.0
+            i += 1
+        return f"{size_bytes:.1f} {size_names[i]}"
+    
+    def handle_file_accept(self, msg_dict, addr):
+        """Handle FILE_ACCEPT message"""
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            receiver_name = msg_dict.get('receiver_name', f"Unknown@{addr[0]}")
+            
+            if transfer_id not in self.active_file_transfers:
+                print(f"{Colors.RED}Error: Transfer {transfer_id} not found{Colors.RESET}")
+                return
+            
+            transfer_info = self.active_file_transfers[transfer_id]
+            filename = transfer_info['filename']
+            file_path = transfer_info['file_path']
+            
+            print(f"\n{Colors.GREEN}✅ File offer accepted!{Colors.RESET}")
+            print(f"Receiver: {Colors.YELLOW}{receiver_name}{Colors.RESET}")
+            print(f"File: {Colors.BLUE}{filename}{Colors.RESET}")
+            print(f"Starting file transfer...")
+            
+            # Update transfer status
+            transfer_info['status'] = 'sending'
+            transfer_info['receiver_name'] = receiver_name
+            
+            # Start sending file chunks
+            self._send_file_chunks(transfer_id, file_path, addr)
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file accept: {e}{Colors.RESET}")
+    
+    def handle_file_reject(self, msg_dict, addr):
+        """Handle FILE_REJECT message"""
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            receiver_name = msg_dict.get('receiver_name', f"Unknown@{addr[0]}")
+            
+            if transfer_id not in self.active_file_transfers:
+                print(f"{Colors.RED}Error: Transfer {transfer_id} not found{Colors.RESET}")
+                return
+            
+            transfer_info = self.active_file_transfers[transfer_id]
+            filename = transfer_info['filename']
+            
+            print(f"\n{Colors.RED}❌ File offer rejected{Colors.RESET}")
+            print(f"Receiver: {Colors.YELLOW}{receiver_name}{Colors.RESET}")
+            print(f"File: {Colors.BLUE}{filename}{Colors.RESET}")
+            
+            # Clean up transfer
+            del self.active_file_transfers[transfer_id]
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file reject: {e}{Colors.RESET}")
+    
+    def _send_file_chunks(self, transfer_id, file_path, addr):
+        """Send file as chunks to receiver"""
+        try:
+            chunk_size = 64 * 1024  # 64KB chunks
+            
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+            
+            # Calculate chunks
+            total_chunks = (len(file_data) + chunk_size - 1) // chunk_size
+            
+            print(f"Sending {total_chunks} chunks...")
+            
+            for chunk_num in range(total_chunks):
+                start = chunk_num * chunk_size
+                end = min(start + chunk_size, len(file_data))
+                chunk_data = file_data[start:end]
+                
+                # Encode chunk as base64
+                chunk_b64 = base64.b64encode(chunk_data).decode('utf-8')
+                
+                # Send chunk
+                msg_dict = {
+                    'type': 'FILE_CHUNK',
+                    'transfer_id': transfer_id,
+                    'chunk_number': str(chunk_num),
+                    'total_chunks': str(total_chunks),
+                    'chunk_data': chunk_b64
+                }
+                
+                self.network_manager.send_message(msg_dict, addr)
+                print(f"Sent chunk {chunk_num + 1}/{total_chunks}")
+                
+                # Small delay to avoid overwhelming receiver
+                time.sleep(0.1)
+            
+            print(f"{Colors.GREEN}✅ File transfer completed!{Colors.RESET}")
+            print(f"Waiting for confirmation from receiver...")
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error sending file chunks: {e}{Colors.RESET}")
+            # Send error confirmation
+            self._send_file_received(transfer_id, addr, 'send_error')
     
     def get_active_games(self):
         """Get list of active games"""
