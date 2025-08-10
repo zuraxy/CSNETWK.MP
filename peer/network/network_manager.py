@@ -95,6 +95,13 @@ class NetworkManager:
             try:
                 data, addr = self.socket.recvfrom(SOCKET_BUFFER_SIZE)
                 self._handle_message(data, addr)
+            except OSError as e:
+                # Handle specific Windows socket errors more gracefully
+                if e.winerror == 10054:  # Connection forcibly closed
+                    # Silently ignore this error when someone disconnects
+                    continue
+                elif self.running:  # Only log other errors if we're supposed to be running
+                    print(f"Error receiving message on main socket: {e}")
             except Exception as e:
                 if self.running:  # Only log if we're supposed to be running
                     print(f"Error receiving message on main socket: {e}")
@@ -105,6 +112,13 @@ class NetworkManager:
             try:
                 data, addr = self.discovery_socket.recvfrom(SOCKET_BUFFER_SIZE)
                 self._handle_message(data, addr)
+            except OSError as e:
+                # Handle specific Windows socket errors more gracefully
+                if e.winerror == 10054:  # Connection forcibly closed
+                    # Silently ignore this error when someone disconnects
+                    continue
+                elif self.running:  # Only log other errors if we're supposed to be running
+                    print(f"Error receiving discovery message: {e}")
             except Exception as e:
                 if self.running:  # Only log if we're supposed to be running
                     print(f"Error receiving discovery message: {e}")

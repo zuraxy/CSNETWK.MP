@@ -292,9 +292,10 @@ class UserInterface:
         if len(cmd_parts) == 1:  # Just "GAME" command
             # Show game help and active games
             print("\n🎮 Tic-Tac-Toe Game Commands:")
+            print("  GAME <user@ip>           - Invite user to play (you are X)")
             print("  GAME <user@ip> O         - Invite user to play (you are O)")
             print("  GAME <user@ip> X <pos>   - Invite and make first move")
-            print("  GAME <game_id> <pos>     - Make a move (position 0-8)")
+            print("  GAME <game_id> <pos>     - Make a move (position 1-9)")
             print("  GAME LIST                - Show active games")
             
             active_games = self.message_handler.get_active_games()
@@ -333,6 +334,11 @@ class UserInterface:
                 else:
                     print("\nNo active games.")
                 return
+            
+            elif '@' in cmd_parts[1]:
+                # Invite user to game (default: inviter is X)
+                target_user = cmd_parts[1]
+                return self._send_game_invitation(target_user, 'X')
         
         elif len(cmd_parts) == 3:
             if '@' in cmd_parts[1] and cmd_parts[2].upper() in ['X', 'O']:
@@ -346,11 +352,11 @@ class UserInterface:
                 game_id = cmd_parts[1]
                 try:
                     position = int(cmd_parts[2])
-                    if position < 0 or position > 8:
-                        print("Error: Position must be between 0 and 8")
+                    if position < 1 or position > 9:
+                        print("Error: Position must be between 1 and 9")
                         return
                 except ValueError:
-                    print("Error: Position must be a number between 0 and 8")
+                    print("Error: Position must be a number between 1 and 9")
                     return
                 
                 return self._make_game_move(game_id, position)
@@ -361,11 +367,11 @@ class UserInterface:
                 target_user = cmd_parts[1]
                 try:
                     position = int(cmd_parts[3])
-                    if position < 0 or position > 8:
-                        print("Error: Position must be between 0 and 8")
+                    if position < 1 or position > 9:
+                        print("Error: Position must be between 1 and 9")
                         return
                 except ValueError:
-                    print("Error: Position must be a number between 0 and 8")
+                    print("Error: Position must be a number between 1 and 9")
                     return
                 
                 return self._send_game_invitation(target_user, 'X', position)
@@ -374,9 +380,10 @@ class UserInterface:
         print("Invalid GAME command format.")
         print("Usage:")
         print("  GAME                      - Show help and active games")
+        print("  GAME <user@ip>            - Invite user (you are X)")
         print("  GAME <user@ip> O          - Invite user (you are O)")
         print("  GAME <user@ip> X <pos>    - Invite and make first move")
-        print("  GAME <game_id> <pos>      - Make a move (position 0-8)")
+        print("  GAME <game_id> <pos>      - Make a move (position 1-9)")
         print("  GAME LIST                 - Show active games")
     
     def _send_game_invitation(self, target_user, chosen_symbol='X', first_move_position=None):

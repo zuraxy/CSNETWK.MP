@@ -14,6 +14,13 @@ import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from protocol.protocol import Protocol
 
+# ANSI Color codes for board display
+class Colors:
+    RED = '\033[91m'      # Red for X
+    GREEN = '\033[92m'    # Green for O
+    RESET = '\033[0m'     # Reset to default color
+    BOLD = '\033[1m'      # Bold text
+
 
 class MessageHandler:
     """Handles processing and routing of different message types"""
@@ -38,6 +45,16 @@ class MessageHandler:
         self.network_manager.register_message_handler('UNFOLLOW', self.handle_unfollow_request)
         self.network_manager.register_message_handler('FOLLOW_RESPONSE', self.handle_follow_response)
         self.network_manager.register_message_handler('UNFOLLOW_RESPONSE', self.handle_unfollow_response)
+        
+        # Tic-Tac-Toe game message handlers
+        self.network_manager.register_message_handler('TICTACTOE_INVITE', self.handle_tictactoe_invite)
+        self.network_manager.register_message_handler('TICTACTOE_MOVE', self.handle_tictactoe_move)
+        self.network_manager.register_message_handler('TICTACTOE_RESULT', self.handle_tictactoe_result)
+        
+        # Game state storage
+        self.active_games = {}  # game_id -> game_state
+        self.game_counter = 0  # Counter for generating game IDs
+        self.pending_invitations = {}  # game_id -> invitation_info
     
     def set_verbose_mode(self, verbose):
         """Set verbose mode for message display"""
@@ -512,3 +529,411 @@ class MessageHandler:
                 else:
                     display_name = self.peer_manager.get_display_name(from_user)
                     print(f"\n[UNFOLLOW] Unfollow request to {display_name} failed")
+
+    # ==================== TIC-TAC-TOE GAME METHODS ====================
+    
+    def send_tictactoe_invite(self, target_user_id, chosen_symbol='X', first_move_position=None):
+        """Send a Tic-Tac-Toe game invitation to another peer"""
+        if not self.peer_manager.is_peer_known(target_user_id):
+            return False
+        
+        game_id = self._generate_game_id()
+        
+        # Set up players based on chosen symbol
+        if chosen_symbol == 'X':
+            player_x = self.peer_manager.user_id
+            player_o = target_user_id
+            current_turn = 'X'
+        else:  # chosen_symbol == 'O'
+            player_x = target_user_id
+            player_o = self.peer_manager.user_id
+            current_turn = 'X'  # X always goes first
+        
+        # Initialize board
+        board = ['0', '1', '2', '3', '4', '5', '6', '7', '8']
+        
+        # If choosing X and making first move
+        if chosen_symbol == 'X' and first_move_position is not None:
+            if not self._is_valid_move(board, first_move_position):
+                return False  # Invalid first move
+            board[first_move_position] = 'X'
+            current_turn = 'O'  # Switch to O's turn
+        
+        message = {
+            'TYPE': 'TICTACTOE_INVITE',
+            'FROM': self.peer_manager.user_id,
+            'TO': target_user_id,
+            'GAMEID': game_id,
+            'MESSAGE_ID': self._generate_message_id(),
+            'SYMBOL': chosen_symbol,
+            'TIMESTAMP': str(int(time.time())),
+            'TOKEN': f"{self.peer_manager.user_id}|{int(time.time())}|game",
+            'BOARD': ','.join(board)
+        }
+        
+        # Initialize game state
+        self.active_games[game_id] = {
+            'player_x': player_x,
+            'player_o': player_o,
+            'board': board,
+            'current_turn': current_turn,
+            'status': 'waiting_for_response',
+            'turn_number': 1 if first_move_position is not None else 1
+        }
+        
+        peer_info = self.peer_manager.get_peer_info(target_user_id)
+        if peer_info:
+            return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+        return False
+    
+    def send_tictactoe_move(self, game_id, position):
+        """Send a Tic-Tac-Toe move"""
+        if game_id not in self.active_games:
+            return False
+        
+        game = self.active_games[game_id]
+        current_player = self.peer_manager.user_id
+        
+        # Determine if we are X or O
+        if current_player == game['player_x']:
+            player_symbol = 'X'
+            opponent = game['player_o']
+        else:
+            player_symbol = 'O'
+            opponent = game['player_x']
+        
+        # Validate it's our turn
+        if game['current_turn'] != player_symbol:
+            return False
+        
+        # Validate position is available
+        if not self._is_valid_move(game['board'], position):
+            return False
+        
+        # Make the move
+        game['board'][position] = player_symbol
+        
+        # Check for win or draw
+        result = self._check_game_result(game['board'])
+        
+        # Increment turn number
+        game['turn_number'] = game.get('turn_number', 1) + 1
+        
+        message = {
+            'TYPE': 'TICTACTOE_MOVE',
+            'FROM': self.peer_manager.user_id,
+            'TO': opponent,
+            'GAMEID': game_id,
+            'MESSAGE_ID': self._generate_message_id(),
+            'POSITION': str(position),
+            'SYMBOL': player_symbol,
+            'TURN': str(game['turn_number']),
+            'TOKEN': f"{self.peer_manager.user_id}|{int(time.time())}|game"
+        }
+        
+        # Switch turns
+        game['current_turn'] = 'O' if player_symbol == 'X' else 'X'
+        
+        # If game ended, send result
+        if result['finished']:
+            game['status'] = 'finished'
+            self._send_game_result(game_id, result, opponent)
+        
+        peer_info = self.peer_manager.get_peer_info(opponent)
+        if peer_info:
+            return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+        return False
+    
+    def handle_tictactoe_invite(self, msg_dict, addr):
+        """Handle incoming Tic-Tac-Toe game invitation"""
+        from_user = msg_dict.get('FROM', 'Unknown')
+        to_user = msg_dict.get('TO', '')
+        game_id = msg_dict.get('GAMEID', '')
+        inviter_symbol = msg_dict.get('SYMBOL', 'X')
+        board_str = msg_dict.get('BOARD', '0,1,2,3,4,5,6,7,8')
+        timestamp = msg_dict.get('TIMESTAMP', None)
+        message_id = msg_dict.get('MESSAGE_ID', '')
+        token = msg_dict.get('TOKEN', '')
+        
+        # Only process if this invitation is for us
+        if to_user == self.peer_manager.user_id:
+            # Set up players based on inviter's choice
+            if inviter_symbol == 'X':
+                player_x = from_user
+                player_o = self.peer_manager.user_id
+                our_symbol = 'O'
+                their_symbol = 'X'
+            else:  # inviter_symbol == 'O'
+                player_x = self.peer_manager.user_id
+                player_o = from_user
+                our_symbol = 'X'
+                their_symbol = 'O'
+            
+            # Parse board
+            board = board_str.split(',')
+            
+            # Determine current turn (X always goes first, but board might already have moves)
+            x_moves = sum(1 for cell in board if cell == 'X')
+            o_moves = sum(1 for cell in board if cell == 'O')
+            current_turn = 'X' if x_moves == o_moves else 'O'
+            
+            # Store the game state
+            self.active_games[game_id] = {
+                'player_x': player_x,
+                'player_o': player_o,
+                'board': board,
+                'current_turn': current_turn,
+                'status': 'active',
+                'turn_number': x_moves + o_moves + 1
+            }
+            
+            if self.verbose_mode:
+                # Format timestamp
+                if timestamp:
+                    try:
+                        ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        ts_str = str(timestamp)
+                else:
+                    ts_str = "N/A"
+                
+                print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: TICTACTOE_INVITE")
+                print(f"TYPE: TICTACTOE_INVITE")
+                print(f"FROM: {from_user}")
+                print(f"TO: {to_user}")
+                print(f"GAMEID: {game_id}")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"SYMBOL: {inviter_symbol}")
+                print(f"TIMESTAMP: {timestamp}")
+                print(f"TOKEN: {token}")
+            else:
+                display_name = self.peer_manager.get_display_name(from_user)
+                print(f"\n🎮 [GAME] {display_name} invited you to play Tic-Tac-Toe!")
+            
+            print(f"Game ID: {game_id}")
+            print(f"You are '{our_symbol}', they are '{their_symbol}'")
+            
+            # Show current board state
+            self._display_board(board)
+            
+            # Check if it's already our turn (in case they made first move as X)
+            if current_turn == our_symbol:
+                print(f"It's your turn! Use: GAME {game_id} <position>")
+            else:
+                display_name = self.peer_manager.get_display_name(from_user)
+                print(f"Waiting for {display_name} ({their_symbol}) to make their move.")
+    
+    def handle_tictactoe_move(self, msg_dict, addr):
+        """Handle incoming Tic-Tac-Toe move"""
+        from_user = msg_dict.get('FROM', 'Unknown')
+        to_user = msg_dict.get('TO', '')
+        game_id = msg_dict.get('GAMEID', '')
+        position = int(msg_dict.get('POSITION', 0))
+        symbol = msg_dict.get('SYMBOL', '')
+        turn = msg_dict.get('TURN', '1')
+        timestamp = msg_dict.get('TIMESTAMP', None)
+        message_id = msg_dict.get('MESSAGE_ID', '')
+        token = msg_dict.get('TOKEN', '')
+        
+        # Only process if this move is for us
+        if to_user == self.peer_manager.user_id and game_id in self.active_games:
+            game = self.active_games[game_id]
+            
+            # Update board with the move
+            game['board'][position] = symbol
+            
+            # Update turn number
+            game['turn_number'] = int(turn)
+            
+            # Update current turn to switch to us (since opponent just played)
+            game['current_turn'] = 'O' if symbol == 'X' else 'X'
+            
+            # Check game result
+            result = self._check_game_result(game['board'])
+            
+            if self.verbose_mode:
+                # Format timestamp
+                if timestamp:
+                    try:
+                        ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        ts_str = str(timestamp)
+                else:
+                    ts_str = "N/A"
+                
+                print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: TICTACTOE_MOVE")
+                print(f"TYPE: TICTACTOE_MOVE")
+                print(f"FROM: {from_user}")
+                print(f"TO: {to_user}")
+                print(f"GAMEID: {game_id}")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"POSITION: {position}")
+                print(f"SYMBOL: {symbol}")
+                print(f"TURN: {turn}")
+                print(f"TOKEN: {token}")
+            else:
+                display_name = self.peer_manager.get_display_name(from_user)
+                print(f"\n🎮 [GAME] {display_name} played {symbol} at position {position}")
+            
+            self._display_board(game['board'])
+            
+            if result['finished']:
+                game['status'] = 'finished'
+                if result['winner']:
+                    if result['winner'] == 'X':
+                        winner_name = self.peer_manager.get_display_name(game['player_x'])
+                        print(f"🏆 Game Over! {winner_name} (X) wins!")
+                    else:
+                        winner_name = self.peer_manager.get_display_name(game['player_o'])
+                        print(f"🏆 Game Over! {winner_name} (O) wins!")
+                else:
+                    print("🤝 Game Over! It's a draw!")
+                
+                # Clean up game
+                del self.active_games[game_id]
+            else:
+                # It's our turn now
+                current_player = self.peer_manager.user_id
+                if current_player == game['player_x']:
+                    your_symbol = 'X'
+                else:
+                    your_symbol = 'O'
+                print(f"Your turn! You are '{your_symbol}'. Use: GAME {game_id} <position>")
+    
+    def handle_tictactoe_result(self, msg_dict, addr):
+        """Handle Tic-Tac-Toe game result"""
+        from_user = msg_dict.get('FROM', 'Unknown')
+        to_user = msg_dict.get('TO', '')
+        game_id = msg_dict.get('GAMEID', '')
+        result_type = msg_dict.get('RESULT', '')
+        symbol = msg_dict.get('SYMBOL', '')
+        winning_line = msg_dict.get('WINNING_LINE', '')
+        timestamp = msg_dict.get('TIMESTAMP', None)
+        message_id = msg_dict.get('MESSAGE_ID', '')
+        
+        # Only process if this result is for us
+        if to_user == self.peer_manager.user_id and game_id in self.active_games:
+            if self.verbose_mode:
+                # Format timestamp
+                if timestamp:
+                    try:
+                        ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        ts_str = str(timestamp)
+                else:
+                    ts_str = "N/A"
+                print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: TICTACTOE_RESULT")
+                print(f"TYPE: TICTACTOE_RESULT")
+                print(f"FROM: {from_user}")
+                print(f"TO: {to_user}")
+                print(f"GAMEID: {game_id}")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"RESULT: {result_type}")
+                print(f"SYMBOL: {symbol}")
+                print(f"WINNING_LINE: {winning_line}")
+                print(f"TIMESTAMP: {timestamp}")
+            
+            game = self.active_games[game_id]
+            display_name = self.peer_manager.get_display_name(from_user)
+            
+            if result_type == 'WIN' and symbol:
+                if symbol == 'X':
+                    winner_name = self.peer_manager.get_display_name(game['player_x'])
+                    print(f"🏆 Game Over! {winner_name} (X) wins!")
+                else:
+                    winner_name = self.peer_manager.get_display_name(game['player_o'])
+                    print(f"🏆 Game Over! {winner_name} (O) wins!")
+            elif result_type == 'DRAW':
+                print("🤝 Game Over! It's a draw!")
+            
+            # Clean up game
+            del self.active_games[game_id]
+    
+    def _send_game_result(self, game_id, result, opponent):
+        """Send game result to opponent"""
+        winning_line = ""
+        if result['winning_line']:
+            winning_line = ','.join(map(str, result['winning_line']))
+        
+        message = {
+            'TYPE': 'TICTACTOE_RESULT',
+            'FROM': self.peer_manager.user_id,
+            'TO': opponent,
+            'GAMEID': game_id,
+            'MESSAGE_ID': self._generate_message_id(),
+            'RESULT': 'WIN' if result['winner'] else 'DRAW',
+            'SYMBOL': result['winner'] or '',
+            'WINNING_LINE': winning_line,
+            'TIMESTAMP': str(int(time.time()))
+        }
+        
+        peer_info = self.peer_manager.get_peer_info(opponent)
+        if peer_info:
+            self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+    
+    def _generate_game_id(self):
+        """Generate a unique game ID in format gX where X is 0-255"""
+        game_id = f"g{self.game_counter}"
+        self.game_counter = (self.game_counter + 1) % 256  # Keep within 0-255 range
+        return game_id
+    
+    def _is_valid_move(self, board, position):
+        """Check if a move is valid"""
+        if position < 0 or position > 8:
+            return False
+        return board[position] not in ['X', 'O']
+    
+    def _check_game_result(self, board):
+        """Check if the game has ended and return result"""
+        # Check rows
+        for i in range(0, 9, 3):
+            if board[i] == board[i+1] == board[i+2] and board[i] in ['X', 'O']:
+                return {'finished': True, 'winner': board[i], 'winning_line': [i, i+1, i+2]}
+        
+        # Check columns
+        for i in range(3):
+            if board[i] == board[i+3] == board[i+6] and board[i] in ['X', 'O']:
+                return {'finished': True, 'winner': board[i], 'winning_line': [i, i+3, i+6]}
+        
+        # Check diagonals
+        if board[0] == board[4] == board[8] and board[0] in ['X', 'O']:
+            return {'finished': True, 'winner': board[0], 'winning_line': [0, 4, 8]}
+        if board[2] == board[4] == board[6] and board[2] in ['X', 'O']:
+            return {'finished': True, 'winner': board[2], 'winning_line': [2, 4, 6]}
+        
+        # Check for draw
+        if all(cell in ['X', 'O'] for cell in board):
+            return {'finished': True, 'winner': None, 'winning_line': None}
+        
+        # Game continues
+        return {'finished': False, 'winner': None, 'winning_line': None}
+    
+    def _display_board(self, board):
+        """Display the Tic-Tac-Toe board with colored X (red) and O (green)"""
+        def colorize_cell(cell):
+            if cell == 'X':
+                return f"{Colors.BOLD}{Colors.RED}X{Colors.RESET}"
+            elif cell == 'O':
+                return f"{Colors.BOLD}{Colors.GREEN}O{Colors.RESET}"
+            else:
+                return cell
+        
+        print("\n   |   |   ")
+        print(f" {colorize_cell(board[0])} | {colorize_cell(board[1])} | {colorize_cell(board[2])} ")
+        print("___|___|___")
+        print("   |   |   ")
+        print(f" {colorize_cell(board[3])} | {colorize_cell(board[4])} | {colorize_cell(board[5])} ")
+        print("___|___|___")
+        print("   |   |   ")
+        print(f" {colorize_cell(board[6])} | {colorize_cell(board[7])} | {colorize_cell(board[8])} ")
+        print("   |   |   ")
+    
+    def get_active_games(self):
+        """Get list of active games"""
+        return list(self.active_games.keys())
+    
+    def get_game_info(self, game_id):
+        """Get information about a specific game"""
+        return self.active_games.get(game_id)
+
+    # ==================== HELPER METHODS ====================
