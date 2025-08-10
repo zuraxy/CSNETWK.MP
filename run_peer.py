@@ -28,8 +28,17 @@ Key Features:
 - DM: Send direct messages to specific peers  
 - PROFILE: Share your profile (with optional avatar) with all peers
 - LIST: Show all discovered peers on the network
+- GROUP: Create and manage group chats with multiple users
 - VERBOSE: Toggle between technical and user-friendly display
 - QUIT: Exit the application
+
+Group Chat Features:
+- Create groups with multiple members
+- Send messages to all group members
+- Add/remove members from groups (creator only)
+- View group information and membership
+- List all groups you belong to
+- Leave groups you no longer want to be part of
 
 Peer Discovery:
 - Peers automatically discover each other via UDP broadcast
