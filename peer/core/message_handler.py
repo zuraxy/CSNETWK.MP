@@ -1122,7 +1122,7 @@ class MessageHandler:
                 'receiver_name': self.peer_manager.get_self_info().get('name', 'Unknown')
             }
             
-            self.network_manager.send_message(msg_dict, addr)
+            self.network_manager.send_to_address(msg_dict, addr[0], addr[1])
             
         except Exception as e:
             print(f"{Colors.RED}Error sending file received confirmation: {e}{Colors.RESET}")
@@ -1220,7 +1220,7 @@ class MessageHandler:
                     'chunk_data': chunk_b64
                 }
                 
-                self.network_manager.send_message(msg_dict, addr)
+                self.network_manager.send_to_address(msg_dict, addr[0], addr[1])
                 print(f"Sent chunk {chunk_num + 1}/{total_chunks}")
                 
                 # Small delay to avoid overwhelming receiver

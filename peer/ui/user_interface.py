@@ -578,7 +578,7 @@ class UserInterface:
                 'transfer_id': transfer_id,
                 'receiver_name': self.message_handler.peer_manager.get_self_info().get('name', 'Unknown')
             }
-            self.message_handler.network_manager.send_message(msg_dict, offer_info['sender_addr'])
+            self.message_handler.network_manager.send_to_address(msg_dict, offer_info['sender_addr'][0], offer_info['sender_addr'][1])
             print(f"File acceptance sent. Waiting for file chunks...")
         except Exception as e:
             print(f"Error sending acceptance: {e}")
@@ -605,7 +605,7 @@ class UserInterface:
                 'transfer_id': transfer_id,
                 'receiver_name': self.message_handler.peer_manager.get_self_info().get('name', 'Unknown')
             }
-            self.message_handler.network_manager.send_message(msg_dict, offer_info['sender_addr'])
+            self.message_handler.network_manager.send_to_address(msg_dict, offer_info['sender_addr'][0], offer_info['sender_addr'][1])
             
             # Remove from pending offers
             del self.message_handler.pending_file_offers[transfer_id]
@@ -692,7 +692,7 @@ class UserInterface:
                 'sender_name': self.message_handler.peer_manager.get_self_info().get('name', 'Unknown')
             }
             
-            self.message_handler.network_manager.send_message(msg_dict, target_peer['addr'])
+            self.message_handler.network_manager.send_to_address(msg_dict, target_peer['addr'][0], target_peer['addr'][1])
             print(f"📤 File offer sent to {target_peer.get('name', 'Unknown')} ({target_peer['addr'][0]})")
             print(f"File: {filename} ({self._format_file_size(file_size)})")
             print(f"Transfer ID: {transfer_id}")
