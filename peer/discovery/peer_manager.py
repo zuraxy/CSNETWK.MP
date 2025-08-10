@@ -151,6 +151,13 @@ class PeerManager:
             return "[AVATAR]"
         return ""
     
+    def get_self_info(self):
+        """Get information about the current user"""
+        return {
+            'user_id': self.user_id,
+            'name': self.get_display_name(self.user_id) if self.user_id else 'Unknown'
+        }
+    
     def cleanup_old_peers(self):
         """Remove peers that haven't been seen recently"""
         current_time = time.time()
