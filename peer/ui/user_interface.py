@@ -587,13 +587,8 @@ class UserInterface:
         offer_info = self.message_handler.pending_file_offers[transfer_id]
         print(f"Accepting file '{offer_info['filename']}' from {offer_info['sender_name']}")
         
-        # Mark as accepting - the sender will start sending chunks
-        self.message_handler.receiving_files[transfer_id] = {
-            'chunks': {},
-            'total_chunks': 0,
-            'received_count': 0,
-            'sender_addr': offer_info['sender_addr']
-        }
+        # Note: receiving_files structure will be initialized when first chunk arrives
+        # Don't pre-initialize it here to avoid total_chunks=0 issue
         
         # Send acceptance message back to sender
         try:

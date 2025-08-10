@@ -1063,6 +1063,10 @@ class MessageHandler:
             total_chunks = file_info['total_chunks']
             sender_addr = file_info['sender_addr']
             
+            print(f"Debug: File info total_chunks: {total_chunks}")
+            print(f"Debug: Available chunks: {list(chunks.keys())}")
+            print(f"Debug: Chunk count: {len(chunks)}")
+            
             # Get file offer info
             if transfer_id not in self.pending_file_offers:
                 print(f"{Colors.RED}Error: File offer info not found for transfer {transfer_id}{Colors.RESET}")
