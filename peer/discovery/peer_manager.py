@@ -191,6 +191,47 @@ class PeerManager:
         """Check if a peer is known"""
         return user_id in self.known_peers
     
+    def find_peer_by_handle(self, handle):
+        """Find a peer by handle (user@ip format)"""
+        try:
+            if '@' not in handle:
+                return None
+            
+            user_part, ip_part = handle.split('@', 1)
+            
+            # Look for exact match in known peers
+            for user_id, peer_info in self.known_peers.items():
+                if peer_info['ip'] == ip_part:
+                    # If user part matches or is empty, return this peer
+                    if not user_part or user_id.startswith(user_part):
+                        return {
+                            'user_id': user_id,
+                            'name': self.get_display_name(user_id),
+                            'addr': (peer_info['ip'], peer_info['port'])
+                        }
+            
+            # If no known peer found, try to create a basic peer info
+            # This allows sending to peers not yet discovered
+            try:
+                # Use default port if not specified
+                if ':' in ip_part:
+                    ip, port = ip_part.split(':', 1)
+                    port = int(port)
+                else:
+                    ip = ip_part
+                    port = 12345  # Default port
+                
+                return {
+                    'user_id': handle,
+                    'name': handle,
+                    'addr': (ip, port)
+                }
+            except ValueError:
+                return None
+                
+        except Exception:
+            return None
+    
     def follow_peer(self, user_id):
         """Add a peer to your following list"""
         if self.is_peer_known(user_id) and user_id != self.user_id:
