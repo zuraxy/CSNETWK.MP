@@ -258,6 +258,20 @@ class WorkingP2PChatApp(App):
             
             print(f"DEBUG: User ID set to: {user_id}")
             
+            # Set up peer discovery callbacks for real-time updates
+            def on_peer_discovered(peer_id):
+                print(f"DEBUG: New peer discovered: {peer_id}")
+                self.call_from_thread(self._update_peer_list)
+                self.call_from_thread(self.add_chat_message, "SYSTEM", f"🆕 New peer discovered: {peer_id}")
+            
+            def on_peer_lost(peer_id):
+                print(f"DEBUG: Peer lost: {peer_id}")
+                self.call_from_thread(self._update_peer_list)
+                self.call_from_thread(self.add_chat_message, "SYSTEM", f"📤 Peer disconnected: {peer_id}")
+            
+            self.peer_manager.on_peer_discovered = on_peer_discovered
+            self.peer_manager.on_peer_lost = on_peer_lost
+            
             # Set verbose mode
             self.message_handler.set_verbose_mode(self.verbose_mode)
             print(f"DEBUG: Verbose mode set to: {self.verbose_mode}")
@@ -285,6 +299,9 @@ class WorkingP2PChatApp(App):
                 # Fallback to call_from_thread
                 self.call_from_thread(self._update_connection_success, user_id, network_info)
             
+            # Start periodic peer list updates
+            self._start_periodic_updates()
+            
         except Exception as e:
             print(f"DEBUG: Error starting P2P: {e}")
             import traceback
@@ -308,7 +325,44 @@ class WorkingP2PChatApp(App):
         self.add_chat_message("SYSTEM", "💡 Type a message and click POST to broadcast to all peers.")
         self.add_chat_message("SYSTEM", f"🔧 Verbose mode: {'ON' if self.verbose_mode else 'OFF'}")
         
+        # Start periodic updates
+        self._start_periodic_updates()
+        
         print("DEBUG: UI updated successfully")
+    
+    def _start_periodic_updates(self):
+        """Start periodic UI updates"""
+        def periodic_update():
+            while self.is_connected:
+                try:
+                    time.sleep(10)  # Update every 10 seconds
+                    if self.is_connected:
+                        self.call_from_thread(self._update_peer_list)
+                except Exception as e:
+                    print(f"DEBUG: Error in periodic update: {e}")
+                    break
+        
+        update_thread = threading.Thread(target=periodic_update, daemon=True)
+        update_thread.start()
+    
+    def _update_peer_list(self):
+        """Update the peer list display"""
+        if PEER_AVAILABLE and self.is_connected:
+            try:
+                peer_list = self.peer_manager.get_peer_list()
+                if peer_list:
+                    peer_display = f"Connected peers ({len(peer_list)}):\n"
+                    for peer_id in peer_list:
+                        peer_info = self.peer_manager.get_peer_info(peer_id)
+                        peer_display += f"  • {peer_id} ({peer_info['ip']}:{peer_info['port']})\n"
+                    self.query_one("#peer-list", Static).update(peer_display.strip())
+                else:
+                    self.query_one("#peer-list", Static).update("No peers connected")
+            except Exception as e:
+                print(f"DEBUG: Error updating peer list: {e}")
+                self.query_one("#peer-list", Static).update(f"Error updating peer list: {e}")
+        else:
+            self.query_one("#peer-list", Static).update("P2P system not available")
     
     def _update_connection_error(self, error_msg):
         """Update UI for connection error"""

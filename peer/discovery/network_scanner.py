@@ -23,7 +23,37 @@ class NetworkScanner:
         self.scanner_id = f"scanner-{int(time.time())}"
         self.scan_summary = {}
     
-    # When replacing this method:
+    def scan_for_peers(self, verbose=True):
+        """Main method to scan for peers on the network"""
+        if verbose:
+            print(f"Scanning for peers on port {self.discovery_port} (timeout: {self.scan_timeout}s)")
+        
+        self.discovered_peers = []  # Clear previous results
+        
+        try:
+            # Create UDP socket for scanning
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.settimeout(0.5)  # Short timeout for individual receives
+            
+            # Send discovery broadcasts
+            self._send_discovery_broadcasts(sock, verbose)
+            
+            # Listen for responses
+            self._listen_for_responses(sock, verbose)
+            
+            # Display results
+            if verbose:
+                self._display_scan_results()
+            
+            sock.close()
+            
+        except Exception as e:
+            if verbose:
+                print(f"Error during peer scan: {e}")
+        
+        return self.discovered_peers
+    
     def _send_discovery_broadcasts(self, sock, verbose=True):
         """Send discovery broadcasts to find peers"""
         discovery_msg = {

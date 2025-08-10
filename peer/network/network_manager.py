@@ -34,19 +34,39 @@ class NetworkManager:
         # Main communication socket
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.socket.bind(("", self.local_port))
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Allow address reuse
         
-        # Discovery socket for peer announcements
-        self.discovery_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.discovery_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Try to bind to a free port
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            try:
+                self.socket.bind(("", self.local_port))
+                break
+            except OSError:
+                self.local_port = random.randint(*peer_port_range)
+                if attempt == max_attempts - 1:
+                    raise Exception(f"Could not bind to any port in range {peer_port_range}")
+        
+        print(f"Main socket bound to port {self.local_port}")
+        
+        # Discovery socket for peer announcements - simplified approach
+        # For Windows compatibility, we'll use a separate socket only if binding succeeds
+        self.discovery_socket = None
+        self.has_discovery_socket = False
         
         try:
+            self.discovery_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.discovery_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.discovery_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             self.discovery_socket.bind(("", discovery_port))
             self.has_discovery_socket = True
             print(f"Discovery socket bound to port {discovery_port}")
         except Exception as e:
-            print(f"Warning: Could not bind discovery socket to port {discovery_port}: {e}")
-            self.has_discovery_socket = False
+            print(f"Discovery socket binding failed: {e}")
+            print("Will use main socket for discovery (this is normal)")
+            if self.discovery_socket:
+                self.discovery_socket.close()
+                self.discovery_socket = None
         
         # Message handlers registry
         self.message_handlers = {}
@@ -76,8 +96,8 @@ class NetworkManager:
         main_thread.daemon = True
         main_thread.start()
         
-        # Start discovery listener if available
-        if self.has_discovery_socket:
+        # Start discovery listener only if we have a separate discovery socket
+        if self.has_discovery_socket and self.discovery_socket:
             discovery_thread = threading.Thread(target=self._listen_discovery_socket)
             discovery_thread.daemon = True
             discovery_thread.start()
@@ -85,9 +105,15 @@ class NetworkManager:
     def stop_listening(self):
         """Stop listening for messages"""
         self.running = False
-        self.socket.close()
-        if self.has_discovery_socket:
-            self.discovery_socket.close()
+        try:
+            self.socket.close()
+        except:
+            pass
+        if self.has_discovery_socket and self.discovery_socket:
+            try:
+                self.discovery_socket.close()
+            except:
+                pass
     
     def _listen_main_socket(self):
         """Listen for messages on main socket"""
@@ -141,10 +167,34 @@ class NetworkManager:
         """Broadcast a discovery message"""
         try:
             encoded_data = Protocol.encode_message(message)
-            # Broadcast to local network using configured addresses
+            sent_count = 0
+            
+            # Use main socket to send to discovery port and peer ports
             for address in BROADCAST_ADDRESSES:
-                self.socket.sendto(encoded_data, (address, self.discovery_port))
-            return True
+                try:
+                    # Send to discovery port
+                    self.socket.sendto(encoded_data, (address, self.discovery_port))
+                    sent_count += 1
+                    print(f"Discovery broadcast sent to {address}:{self.discovery_port}")
+                    
+                    # Also send to a range of peer ports to catch other instances
+                    for port in range(self.peer_port_range[0], min(self.peer_port_range[0] + 20, self.peer_port_range[1])):
+                        try:
+                            self.socket.sendto(encoded_data, (address, port))
+                        except:
+                            pass  # Ignore failures for port scanning
+                            
+                except Exception as e:
+                    print(f"Failed to broadcast to {address}: {e}")
+            
+            # Direct localhost attempts
+            try:
+                self.socket.sendto(encoded_data, ('127.0.0.1', self.discovery_port))
+                sent_count += 1
+            except Exception as e:
+                print(f"Failed to send to localhost discovery: {e}")
+                
+            return sent_count > 0
         except Exception as e:
             print(f"Error broadcasting discovery: {e}")
             return False
