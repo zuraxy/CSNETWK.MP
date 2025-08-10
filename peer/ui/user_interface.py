@@ -516,9 +516,19 @@ class UserInterface:
         file_path = parts[3]
         description = " ".join(parts[4:]) if len(parts) > 4 else "No description"
         
+        # Convert relative path to absolute path
+        if not os.path.isabs(file_path):
+            file_path = os.path.abspath(file_path)
+        
+        print(f"Debug: Original file path: {parts[3]}")
+        print(f"Debug: Resolved file path: {file_path}")
+        print(f"Debug: Current working directory: {os.getcwd()}")
+        print(f"Debug: File exists check: {os.path.exists(file_path)}")
+        
         # Validate file path
         if not os.path.exists(file_path):
             print(f"Error: File '{file_path}' not found")
+            print(f"Tried looking in: {os.getcwd()}")
             return
         
         if not os.path.isfile(file_path):
@@ -536,6 +546,15 @@ class UserInterface:
         print(f"Debug: File size: {file_size} bytes")
         print(f"Debug: Filename: {filename}")
         print(f"Debug: File type: {file_type}")
+        
+        # Double-check by reading the file content
+        try:
+            with open(file_path, 'rb') as f:
+                test_content = f.read()
+            print(f"Debug: Actual file content length: {len(test_content)} bytes")
+            print(f"Debug: File content preview: {test_content[:100]}")
+        except Exception as e:
+            print(f"Debug: Error reading file for test: {e}")
         
         # Check file size limit (50MB)
         max_size = 50 * 1024 * 1024  # 50MB
