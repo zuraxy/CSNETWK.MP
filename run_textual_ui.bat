@@ -6,6 +6,6 @@ echo ============================================================
 echo Starting with Python 3.13...
 echo.
 
-"C:\Users\enzch\AppData\Local\Microsoft\WindowsApps\python3.13.exe" fully_working_textual_ui.py
+"C:\Users\Zurax\AppData\Local\Programs\Python\Python313\python.exe" fully_working_textual_ui.py
 
 pause
