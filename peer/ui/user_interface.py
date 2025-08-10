@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+"""
+User Interface Module
+Handles user interaction and command processing
+"""
+import os
+import base64
+import mimetypes
+
 # Add at top of file
 from peer.config.settings import DEFAULT_VERBOSE_MODE
 
@@ -15,34 +24,51 @@ class UserInterface:
     def start_command_loop(self):
         """Start the main command processing loop"""
         print(f"\nPeer-to-Peer Chat Ready!")
-        print(f"Commands: POST, DM, PROFILE, LIST, VERBOSE, QUIT")
+        print(f"Commands: POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, VERBOSE, QUIT")
+        print(f"Verbose mode: {'ON' if self.message_handler.verbose_mode else 'OFF'}")
         
         self.running = True
         while self.running:
             try:
-                cmd = input("\nCommand (POST/DM/PROFILE/LIST/VERBOSE/QUIT): ").strip().upper()
+                cmd = input("\nCommand (POST/DM/PROFILE/LIST/FOLLOW/UNFOLLOW/FOLLOWING/FOLLOWERS/VERBOSE/QUIT): ").strip().upper()
                 
-                if cmd == "QUIT":
+                if cmd == "QUIT" or cmd == "Q":
                     print("Goodbye!")
                     self.running = False
-                elif cmd == "VERBOSE":
+                elif cmd == "VERBOSE" or cmd == "V":
                     self._handle_verbose_command()
-                elif cmd == "POST":
+                elif cmd == "POST" or cmd == "P":
                     self._handle_post_command()
-                elif cmd == "DM":
+                elif cmd == "DM" or cmd == "D":
                     self._handle_dm_command()
-                elif cmd == "PROFILE":
+                elif cmd == "PROFILE" or cmd == "PROF":
                     self._handle_profile_command()
-                elif cmd == "LIST":
+                elif cmd == "LIST" or cmd == "L":
                     self._handle_list_command()
+                elif cmd == "FOLLOW" or cmd == "F":
+                    self._handle_follow_command()
+                elif cmd == "UNFOLLOW" or cmd == "UF":
+                    self._handle_unfollow_command()
+                elif cmd == "FOLLOWING":
+                    self._handle_following_command()
+                elif cmd == "FOLLOWERS":
+                    self._handle_followers_command()
+                elif cmd == "":
+                    # Empty command, just continue
+                    continue
                 else:
-                    print("Invalid command. Use POST, DM, PROFILE, LIST, VERBOSE, or QUIT")
+                    print("Invalid command. Use POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, VERBOSE, or QUIT")
+                    print("You can also use single letters: P, D, L, F, UF, V, Q")
                     
             except KeyboardInterrupt:
                 print("\nGoodbye!")
                 self.running = False
+            except EOFError:
+                print("\nGoodbye!")
+                self.running = False
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"Command error: {e}")
+                print("Please try again...")
     
     def stop(self):
         """Stop the command loop"""
@@ -56,6 +82,15 @@ class UserInterface:
     
     def _handle_post_command(self):
         """Handle POST (broadcast message) command"""
+        # Get follower count
+        follower_count = len(self.peer_manager.get_followers())
+        if follower_count == 0:
+            print("You have no followers. Your message won't be received by anyone.")
+            if not input("Continue anyway? (y/n): ").strip().lower().startswith('y'):
+                return
+        else:
+            print(f"Your message will be sent to {follower_count} follower(s).")
+        
         message = input("Message: ").strip()
         if not message:
             print("No message provided")
@@ -64,7 +99,7 @@ class UserInterface:
         sent_count = self.message_handler.send_post_message(message)
         
         if self.message_handler.verbose_mode:
-            print(f"Message broadcasted to {sent_count} peers")
+            print(f"Message broadcasted to {sent_count} followers")
     
     def _handle_dm_command(self):
         """Handle DM (direct message) command"""
@@ -158,4 +193,91 @@ class UserInterface:
             for user_id in peers.keys():
                 display_name = self.peer_manager.get_display_name(user_id)
                 avatar_info = self.peer_manager.get_avatar_info(user_id)
-                print(f"  - {display_name} {avatar_info}")
+                following_status = " [Following]" if self.peer_manager.is_following(user_id) else ""
+                follower_status = " [Follower]" if self.peer_manager.is_follower(user_id) else ""
+                print(f"  - {display_name} ({user_id}){avatar_info}{following_status}{follower_status}")
+    
+    def _handle_follow_command(self):
+        """Handle FOLLOW command to follow a peer"""
+        peers = self.peer_manager.get_all_peers()
+        if not peers:
+            print("No peers available. Use LIST to discover peers first.")
+            return
+        
+        print("Available peers:")
+        for user_id in peers.keys():
+            display_name = self.peer_manager.get_display_name(user_id)
+            following = " [Following]" if self.peer_manager.is_following(user_id) else ""
+            print(f"  - {user_id} ({display_name}){following}")
+        
+        user_to_follow = input("User to follow (user@ip): ").strip()
+        if not user_to_follow:
+            print("No user specified")
+            return
+        
+        # Check if already following
+        if self.peer_manager.is_following(user_to_follow):
+            print(f"You are already following {user_to_follow}")
+            return
+        
+        # Send follow request
+        if self.message_handler.send_follow_request(user_to_follow):
+            print(f"Follow request sent to {user_to_follow}")
+        else:
+            print(f"Error: Could not send follow request to {user_to_follow}")
+    
+    def _handle_unfollow_command(self):
+        """Handle UNFOLLOW command to unfollow a peer"""
+        following = self.peer_manager.get_following()
+        if not following:
+            print("You are not following anyone.")
+            return
+        
+        print("Users you are following:")
+        for user_id in following:
+            display_name = self.peer_manager.get_display_name(user_id)
+            print(f"  - {user_id} ({display_name})")
+        
+        user_to_unfollow = input("User to unfollow (user@ip): ").strip()
+        if not user_to_unfollow:
+            print("No user specified")
+            return
+        
+        # Check if actually following
+        if not self.peer_manager.is_following(user_to_unfollow):
+            print(f"You are not following {user_to_unfollow}")
+            return
+        
+        # Send unfollow request
+        if self.message_handler.send_unfollow_request(user_to_unfollow):
+            print(f"Unfollow request sent to {user_to_unfollow}")
+        else:
+            print(f"Error: Could not send unfollow request to {user_to_unfollow}")
+    
+    def _handle_following_command(self):
+        """Handle FOLLOWING command to list users you follow"""
+        following = self.peer_manager.get_following()
+        if not following:
+            print("You are not following anyone.")
+            return
+        
+        print(f"\nUsers you are following ({len(following)}):")
+        for user_id in following:
+            display_name = self.peer_manager.get_display_name(user_id)
+            avatar_info = self.peer_manager.get_avatar_info(user_id)
+            follower_status = " [Follower]" if self.peer_manager.is_follower(user_id) else ""
+            print(f"  - {display_name} ({user_id}){avatar_info}{follower_status}")
+    
+    def _handle_followers_command(self):
+        """Handle FOLLOWERS command to list users following you"""
+        followers = self.peer_manager.get_followers()
+        if not followers:
+            print("You have no followers.")
+            return
+        
+        print(f"\nUsers following you ({len(followers)}):")
+        for user_id in followers:
+            display_name = self.peer_manager.get_display_name(user_id)
+            avatar_info = self.peer_manager.get_avatar_info(user_id)
+            following_status = " [Following]" if self.peer_manager.is_following(user_id) else ""
+            print(f"  - {display_name} ({user_id}){avatar_info}{following_status}")

@@ -19,6 +19,10 @@ class PeerManager:
         self.known_peers = {}  # user_id -> {'ip': str, 'port': int, 'last_seen': timestamp}
         self.user_profiles = {}  # user_id -> {'display_name': str, 'avatar': bool, 'avatar_type': str}
         
+        # Follow/Following functionality
+        self.followers = set()  # Set of user_ids who follow me
+        self.following = set()  # Set of user_ids I'm following
+        
         # Discovery state
         self.user_id = ""
         self.network_manager = None
@@ -157,6 +161,12 @@ class PeerManager:
             if user_id in self.user_profiles:
                 del self.user_profiles[user_id]
             
+            # Remove from followers and following lists
+            if user_id in self.followers:
+                self.followers.remove(user_id)
+            if user_id in self.following:
+                self.following.remove(user_id)
+            
             # Trigger callback if set
             if self.on_peer_lost:
                 self.on_peer_lost(user_id)
@@ -176,6 +186,50 @@ class PeerManager:
     def is_peer_known(self, user_id):
         """Check if a peer is known"""
         return user_id in self.known_peers
+    
+    def follow_peer(self, user_id):
+        """Add a peer to your following list"""
+        if self.is_peer_known(user_id) and user_id != self.user_id:
+            self.following.add(user_id)
+            return True
+        return False
+    
+    def unfollow_peer(self, user_id):
+        """Remove a peer from your following list"""
+        if user_id in self.following:
+            self.following.remove(user_id)
+            return True
+        return False
+    
+    def add_follower(self, user_id):
+        """Add a peer to your followers list"""
+        if self.is_peer_known(user_id) and user_id != self.user_id:
+            self.followers.add(user_id)
+            return True
+        return False
+    
+    def remove_follower(self, user_id):
+        """Remove a peer from your followers list"""
+        if user_id in self.followers:
+            self.followers.remove(user_id)
+            return True
+        return False
+    
+    def get_followers(self):
+        """Get list of followers"""
+        return list(self.followers)
+    
+    def get_following(self):
+        """Get list of peers you're following"""
+        return list(self.following)
+    
+    def is_following(self, user_id):
+        """Check if you are following a peer"""
+        return user_id in self.following
+    
+    def is_follower(self, user_id):
+        """Check if a peer is following you"""
+        return user_id in self.followers
     
     def _generate_message_id(self):
         """Generate a unique message ID"""
