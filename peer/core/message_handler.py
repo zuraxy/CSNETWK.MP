@@ -1154,6 +1154,9 @@ class MessageHandler:
     
     def handle_file_accept(self, msg_dict, addr):
         """Handle FILE_ACCEPT message"""
+        print(f"Debug: FILE_ACCEPT handler called from {addr}")
+        print(f"Debug: Message content: {msg_dict}")
+        
         try:
             transfer_id = msg_dict.get('transfer_id')
             receiver_name = msg_dict.get('receiver_name', f"Unknown@{addr[0]}")
@@ -1163,6 +1166,7 @@ class MessageHandler:
             
             if transfer_id not in self.active_file_transfers:
                 print(f"{Colors.RED}Error: Transfer {transfer_id} not found{Colors.RESET}")
+                print(f"Debug: Available transfers: {list(self.active_file_transfers.keys())}")
                 return
             
             transfer_info = self.active_file_transfers[transfer_id]

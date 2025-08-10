@@ -129,13 +129,21 @@ class NetworkManager:
             msg_dict = Protocol.decode_message(data)
             msg_type = msg_dict.get('TYPE', '')
             
+            # Debug: Show all incoming messages
+            if msg_type.startswith('FILE_'):
+                print(f"Debug: Received {msg_type} message from {addr}")
+                print(f"Debug: Message content: {msg_dict}")
+            
             if msg_type in self.message_handlers:
                 self.message_handlers[msg_type](msg_dict, addr)
             else:
                 print(f"Unknown message type: {msg_type}")
+                print(f"Debug: Available handlers: {list(self.message_handlers.keys())}")
                 
         except Exception as e:
             print(f"Error processing message from {addr}: {e}")
+            import traceback
+            traceback.print_exc()
     
     def send_to_address(self, data, ip, port):
         """Send data to a specific address"""

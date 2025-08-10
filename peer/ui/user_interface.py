@@ -602,10 +602,16 @@ class UserInterface:
                 'transfer_id': transfer_id,
                 'receiver_name': self.message_handler.peer_manager.get_self_info().get('name', 'Unknown')
             }
+            
+            print(f"Debug: Sending FILE_ACCEPT to {offer_info['sender_addr']}")
+            print(f"Debug: Message: {msg_dict}")
+            
             self.message_handler.network_manager.send_to_address(msg_dict, offer_info['sender_addr'][0], offer_info['sender_addr'][1])
             print(f"File acceptance sent. Waiting for file chunks...")
         except Exception as e:
             print(f"Error sending acceptance: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _handle_file_reject_command(self, parts):
         """Handle FILE REJECT command"""
