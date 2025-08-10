@@ -19,6 +19,9 @@ from protocol.protocol import Protocol
 class Colors:
     RED = '\033[91m'      # Red for X
     GREEN = '\033[92m'    # Green for O
+    YELLOW = '\033[93m'   # Yellow for usernames
+    BLUE = '\033[94m'     # Blue for filenames
+    CYAN = '\033[96m'     # Cyan for file transfer messages
     RESET = '\033[0m'     # Reset to default color
     BOLD = '\033[1m'      # Bold text
 
