@@ -23,6 +23,10 @@ class PeerManager:
         self.followers = set()  # Set of user_ids who follow me
         self.following = set()  # Set of user_ids I'm following
         
+        # Group chat functionality
+        self.groups = {}  # group_id -> {'name': str, 'creator': user_id, 'members': set(), 'created_at': timestamp}
+        self.created_groups = set()  # Set of group_ids I've created
+        
         # Discovery state
         self.user_id = ""
         self.network_manager = None
@@ -230,6 +234,171 @@ class PeerManager:
     def is_follower(self, user_id):
         """Check if a peer is following you"""
         return user_id in self.followers
+    
+    # Group management methods
+    def add_group(self, group_id, group_name, creator_id, members, timestamp):
+        """Add a group the user belongs to"""
+        if group_id not in self.groups:
+            self.groups[group_id] = {
+                'name': group_name,
+                'creator': creator_id,
+                'members': set(),
+                'created_at': timestamp
+            }
+            
+        # Update group info
+        self.groups[group_id]['name'] = group_name
+        
+        # Update member list
+        self.groups[group_id]['members'] = members
+        
+        # Check if user is creator
+        if creator_id == self.user_id:
+            self.created_groups.add(group_id)
+            
+        return True
+        
+    def update_group(self, group_id, updater_id, add_members=None, remove_members=None):
+        """Update group membership"""
+        # Verify group exists
+        if group_id not in self.groups:
+            return False
+            
+        # Verify updater is creator (only creator can update)
+        if self.groups[group_id]['creator'] != updater_id:
+            return False
+            
+        # Add members
+        if add_members:
+            for member in add_members:
+                self.groups[group_id]['members'].add(member)
+                
+        # Remove members
+        if remove_members:
+            for member in remove_members:
+                if member in self.groups[group_id]['members']:
+                    self.groups[group_id]['members'].remove(member)
+                    
+        return True
+    
+    def join_group(self, group_id, group_name, creator, members=None, created_at=None):
+        """Join a group created by someone else"""
+        if group_id in self.groups:
+            # Group already exists, just make sure we're in it
+            if self.user_id not in self.groups[group_id]['members']:
+                self.groups[group_id]['members'].append(self.user_id)
+            self.my_groups.add(group_id)
+            return True, "Joined existing group"
+        
+        # Create group entry
+        if not members:
+            members = [creator, self.user_id]
+        elif self.user_id not in members:
+            members.append(self.user_id)
+            
+        self.groups[group_id] = {
+            'name': group_name,
+            'creator': creator,
+            'members': members,
+            'created_at': created_at or time.time()
+        }
+        
+        # Add to my groups
+        self.my_groups.add(group_id)
+        
+        return True, "Joined new group"
+    
+    def leave_group(self, group_id):
+        """Leave a group"""
+        if group_id not in self.groups:
+            return False, "Group not found"
+        
+        # If you're the creator, you can't leave (must delete instead)
+        if self.groups[group_id]['creator'] == self.user_id:
+            return False, "As the creator, you cannot leave. Delete the group instead."
+        
+        # Remove from members list
+        if self.user_id in self.groups[group_id]['members']:
+            self.groups[group_id]['members'].remove(self.user_id)
+        
+        return True, "Left group successfully"
+    
+    def get_my_groups(self):
+        """Get groups the user is a member of"""
+        return [group_id for group_id, group in self.groups.items() 
+                if self.user_id in group['members']]
+    
+    def is_in_group(self, group_id):
+        """Check if user is in a group"""
+        return (group_id in self.groups and 
+                self.user_id in self.groups[group_id]['members'])
+    
+    def delete_group(self, group_id):
+        """Delete a group (creator only)"""
+        if group_id not in self.groups:
+            return False, "Group not found"
+        
+        # Only creator can delete
+        if self.groups[group_id]['creator'] != self.user_id:
+            return False, "Only the group creator can delete the group"
+        
+        # Delete group
+        del self.groups[group_id]
+        
+        # Remove from created groups
+        if group_id in self.created_groups:
+            self.created_groups.remove(group_id)
+        
+        return True, "Group deleted successfully"
+    
+    def get_group(self, group_id):
+        """Get group information"""
+        return self.groups.get(group_id)
+    
+    def get_group_name(self, group_id):
+        """Get the name of a group"""
+        group = self.groups.get(group_id)
+        return group['name'] if group else None
+    
+    def get_group_members(self, group_id):
+        """Get list of members in a group"""
+        group = self.groups.get(group_id)
+        return group['members'] if group else []
+    
+    def get_group_creator(self, group_id):
+        """Get the creator of a group"""
+        group = self.groups.get(group_id)
+        return group['creator'] if group else None
+    
+    def is_group_member(self, group_id, user_id=None):
+        """Check if a user is a member of a group"""
+        if user_id is None:
+            user_id = self.user_id
+            
+        group = self.groups.get(group_id)
+        return group and user_id in group['members']
+    
+    def is_group_creator(self, group_id, user_id=None):
+        """Check if a user is the creator of a group"""
+        if user_id is None:
+            user_id = self.user_id
+            
+        group = self.groups.get(group_id)
+        return group and group['creator'] == user_id
+    
+    def get_my_groups(self):
+        """Get list of groups the user is a member of"""
+        return [group_id for group_id, group in self.groups.items() 
+                if self.user_id in group['members']]
+    
+    def is_in_group(self, group_id):
+        """Check if user is in a group"""
+        return (group_id in self.groups and 
+                self.user_id in self.groups[group_id]['members'])
+    
+    def get_all_groups(self):
+        """Get all known groups"""
+        return self.groups.copy()
     
     def _generate_message_id(self):
         """Generate a unique message ID"""
