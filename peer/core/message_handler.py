@@ -1116,7 +1116,7 @@ class MessageHandler:
         """Send FILE_RECEIVED confirmation message"""
         try:
             msg_dict = {
-                'type': 'FILE_RECEIVED',
+                'TYPE': 'FILE_RECEIVED',
                 'transfer_id': transfer_id,
                 'status': status,
                 'receiver_name': self.peer_manager.get_self_info().get('name', 'Unknown')
@@ -1213,7 +1213,7 @@ class MessageHandler:
                 
                 # Send chunk
                 msg_dict = {
-                    'type': 'FILE_CHUNK',
+                    'TYPE': 'FILE_CHUNK',
                     'transfer_id': transfer_id,
                     'chunk_number': str(chunk_num),
                     'total_chunks': str(total_chunks),

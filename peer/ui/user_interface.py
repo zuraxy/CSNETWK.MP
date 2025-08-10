@@ -532,6 +532,11 @@ class UserInterface:
         if not file_type:
             file_type = "application/octet-stream"
         
+        print(f"Debug: File path: {file_path}")
+        print(f"Debug: File size: {file_size} bytes")
+        print(f"Debug: Filename: {filename}")
+        print(f"Debug: File type: {file_type}")
+        
         # Check file size limit (50MB)
         max_size = 50 * 1024 * 1024  # 50MB
         if file_size > max_size:
@@ -574,7 +579,7 @@ class UserInterface:
         # Send acceptance message back to sender
         try:
             msg_dict = {
-                'type': 'FILE_ACCEPT',
+                'TYPE': 'FILE_ACCEPT',
                 'transfer_id': transfer_id,
                 'receiver_name': self.message_handler.peer_manager.get_self_info().get('name', 'Unknown')
             }
@@ -601,7 +606,7 @@ class UserInterface:
         # Send rejection message back to sender
         try:
             msg_dict = {
-                'type': 'FILE_REJECT',
+                'TYPE': 'FILE_REJECT',
                 'transfer_id': transfer_id,
                 'receiver_name': self.message_handler.peer_manager.get_self_info().get('name', 'Unknown')
             }
@@ -683,7 +688,7 @@ class UserInterface:
             
             # Send offer message
             msg_dict = {
-                'type': 'FILE_OFFER',
+                'TYPE': 'FILE_OFFER',
                 'transfer_id': transfer_id,
                 'filename': filename,
                 'file_size': str(file_size),
