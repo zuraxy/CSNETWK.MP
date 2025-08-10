@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Button, Label, Input, Static, Header, Footer
-from textual.screen import Screen
+from textual.widgets import Button, Label, Input, Static, Header, Footer, Select
+from textual.screen import Screen, ModalScreen
 from textual.message import Message
 
 # Try to import peer integration
@@ -44,16 +44,16 @@ class WorkingSetupScreen(Screen):
         self.verbose_mode = False
     
     def compose(self) -> ComposeResult:
-        with Container():
+        with Container(classes="setup-container"):
             yield Label("🌐 P2P Chat Setup", classes="title")
             yield Label("Enter your username to join the P2P network")
             yield Input(placeholder="Enter username", id="username-input")
             
-            with Horizontal():
+            with Horizontal(classes="setup-buttons"):
                 yield Button("Enable Verbose Mode", id="verbose-toggle", variant="default")
                 yield Static("OFF", id="verbose-status")
             
-            with Horizontal():
+            with Horizontal(classes="setup-buttons"):
                 yield Button("Join Network", id="join-btn", variant="primary")
                 yield Button("Quit", id="quit-btn", variant="error")
             
@@ -102,6 +102,76 @@ class WorkingSetupScreen(Screen):
             self.post_message(self.SetupComplete(username, self.verbose_mode))
 
 
+class DMScreen(ModalScreen):
+    """Modal screen for sending direct messages"""
+    
+    class DMSent(Message):
+        def __init__(self, recipient: str, message: str):
+            super().__init__()
+            self.recipient = recipient
+            self.message = message
+    
+    def __init__(self, peer_manager):
+        super().__init__()
+        self.peer_manager = peer_manager
+    
+    def compose(self) -> ComposeResult:
+        with Container():
+            yield Label("💬 Send Direct Message", classes="title")
+            
+            # Get available peers
+            peers = self.peer_manager.get_peer_list() if self.peer_manager else []
+            if peers:
+                peer_options = [(peer_id, peer_id) for peer_id in peers]
+                yield Label("Select recipient:")
+                yield Select(peer_options, id="recipient-select")
+            else:
+                yield Label("No peers available")
+                yield Static("Discover peers first before sending DMs", id="no-peers")
+            
+            yield Label("Message:")
+            yield Input(placeholder="Type your direct message...", id="dm-input")
+            
+            with Horizontal():
+                yield Button("Send DM", id="send-dm-btn", variant="primary", disabled=len(peers) == 0)
+                yield Button("Cancel", id="cancel-btn", variant="default")
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "send-dm-btn":
+            try:
+                recipient_select = self.query_one("#recipient-select", Select)
+                dm_input = self.query_one("#dm-input", Input)
+                
+                recipient = str(recipient_select.value) if recipient_select.value else ""
+                message = dm_input.value.strip()
+                
+                if not recipient:
+                    return
+                
+                if not message:
+                    return
+                
+                # Send the DM message to parent
+                self.post_message(self.DMSent(recipient, message))
+                self.dismiss()
+                
+            except Exception as e:
+                print(f"DEBUG: Error in DM screen: {e}")
+                
+        elif event.button.id == "cancel-btn":
+            self.dismiss()
+    
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "dm-input":
+            # Trigger send button
+            try:
+                send_btn = self.query_one("#send-dm-btn", Button)
+                if not send_btn.disabled:
+                    send_btn.press()
+            except:
+                pass
+
+
 class WorkingP2PChatApp(App):
     """Working P2P Chat application"""
     
@@ -120,21 +190,21 @@ class WorkingP2PChatApp(App):
     .chat-area {
         border: solid blue;
         padding: 1;
-        height: 20;
+        height: 12;
         margin-bottom: 1;
     }
     
     .peer-area {
         border: solid green;
         padding: 1;
-        height: 8;
+        height: 5;
         margin-bottom: 1;
     }
     
     .command-area {
         border: solid yellow;
         padding: 1;
-        height: 5;
+        height: 6;
         margin-bottom: 1;
     }
     
@@ -146,22 +216,94 @@ class WorkingP2PChatApp(App):
     
     Button {
         margin-right: 1;
+        min-width: 8;
+        max-width: 12;
+        height: 3;
     }
     
     Input {
-        margin-right: 1;
-        width: 50;
+        height: 3;
     }
     
-    .message {
+    #message-input {
+        width: 1fr;
+        margin-right: 1;
+        min-width: 20;
+        max-width: 60;
+        height: 3;
+    }
+    
+    #username-input {
+        height: 3;
+        width: 40;
+        max-width: 60;
+    }
+    
+    DMScreen {
+        align: center middle;
+    }
+    
+    DMScreen > Container {
+        background: $surface;
+        border: thick $primary;
+        padding: 2;
+        width: 60;
+        height: auto;
+    }
+    
+    Select {
         margin-bottom: 1;
+        width: 100%;
+        height: 3;
+    }
+    
+    #dm-input {
+        width: 100%;
+        margin-bottom: 1;
+        height: 3;
+    }
+    
+    #input-help {
+        color: $text-muted;
+        margin-bottom: 1;
+        text-align: center;
+        height: 1;
+    }
+    
+    /* Setup Screen Styles */
+    .setup-container {
+        align: center middle;
+        padding: 2;
+        max-width: 60;
+        max-height: 20;
+    }
+    
+    .setup-buttons {
+        margin: 1;
+        height: 3;
+    }
+    
+    #status {
+        text-align: center;
+        margin-top: 1;
+        height: 2;
+    }
+    
+    #verbose-status {
+        min-width: 3;
+        max-width: 5;
+        text-align: center;
     }
     """
     
-    TITLE = "P2P Chat - Working Version"
+    TITLE = "P2P Chat - Enhanced with Input Controls"
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("ctrl+c", "quit", "Quit"),
+        ("tab", "focus_next", "Next"),
+        ("shift+tab", "focus_previous", "Previous"),
+        ("enter", "send_message", "Send Message"),
+        ("ctrl+d", "open_dm", "Direct Message"),
     ]
     
     def __init__(self):
@@ -200,17 +342,21 @@ class WorkingP2PChatApp(App):
                 yield Label("👥 Connected Peers", classes="title")
                 yield Static("No peers connected", id="peer-list")
             
-            # Command area
+            # Command area (always visible and accessible)
             with Container(classes="command-area"):
                 yield Label("💬 Send Message", classes="title")
+                yield Static("Type message and press Enter, or use buttons below:", id="input-help")
                 with Horizontal():
-                    yield Input(placeholder="Type your message...", id="message-input")
+                    yield Input(placeholder="Type your message here...", id="message-input")
                     yield Button("POST", id="post-btn", variant="primary")
+                with Horizontal():
                     yield Button("DM", id="dm-btn", variant="default")
                     yield Button("PROFILE", id="profile-btn", variant="default")
+                    yield Button("QUIT", id="quit-main-btn", variant="error")
             
             # Status area
             with Container(classes="status-area"):
+                yield Label("🔧 System Status", classes="title")
                 yield Static("Not connected", id="status")
         
         yield Footer()
@@ -272,6 +418,9 @@ class WorkingP2PChatApp(App):
             self.peer_manager.on_peer_discovered = on_peer_discovered
             self.peer_manager.on_peer_lost = on_peer_lost
             
+            # Set up message handlers for incoming messages
+            self._setup_message_handlers()
+            
             # Set verbose mode
             self.message_handler.set_verbose_mode(self.verbose_mode)
             print(f"DEBUG: Verbose mode set to: {self.verbose_mode}")
@@ -328,7 +477,64 @@ class WorkingP2PChatApp(App):
         # Start periodic updates
         self._start_periodic_updates()
         
+        # Set focus to message input for better UX
+        try:
+            message_input = self.query_one("#message-input", Input)
+            message_input.focus()
+        except Exception as e:
+            print(f"DEBUG: Could not focus message input: {e}")
+        
         print("DEBUG: UI updated successfully")
+    
+    def _setup_message_handlers(self):
+        """Set up handlers for incoming P2P messages"""
+        if not PEER_AVAILABLE or not self.is_connected:
+            return
+        
+        # Store original message handlers
+        original_post_handler = self.message_handler.handle_post_message
+        original_dm_handler = self.message_handler.handle_dm_message
+        original_profile_handler = self.message_handler.handle_profile_message
+        
+        def ui_post_handler(msg_dict, addr):
+            # Call original handler first
+            original_post_handler(msg_dict, addr)
+            
+            # Add to UI
+            user_id = msg_dict.get('USER_ID', 'Unknown')
+            content = msg_dict.get('CONTENT', '')
+            display_name = self.peer_manager.get_display_name(user_id)
+            
+            self.call_from_thread(self.add_chat_message, f"{display_name}", content)
+        
+        def ui_dm_handler(msg_dict, addr):
+            # Call original handler first
+            original_dm_handler(msg_dict, addr)
+            
+            # Add to UI if message is for us
+            to_user = msg_dict.get('TO', '')
+            from_user = msg_dict.get('FROM', 'Unknown')
+            content = msg_dict.get('CONTENT', '')
+            
+            if to_user == self.peer_manager.user_id:
+                display_name = self.peer_manager.get_display_name(from_user)
+                self.call_from_thread(self.add_chat_message, f"[DM] {display_name}", content)
+        
+        def ui_profile_handler(msg_dict, addr):
+            # Call original handler first
+            original_profile_handler(msg_dict, addr)
+            
+            # Add to UI
+            user_id = msg_dict.get('USER_ID', 'Unknown')
+            display_name = msg_dict.get('DISPLAY_NAME', 'Unknown')
+            status = msg_dict.get('STATUS', '')
+            
+            self.call_from_thread(self.add_chat_message, "SYSTEM", f"👤 {display_name} updated profile: {status}")
+        
+        # Replace handlers
+        self.message_handler.handle_post_message = ui_post_handler
+        self.message_handler.handle_dm_message = ui_dm_handler
+        self.message_handler.handle_profile_message = ui_profile_handler
     
     def _start_periodic_updates(self):
         """Start periodic UI updates"""
@@ -399,7 +605,11 @@ class WorkingP2PChatApp(App):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         print(f"DEBUG: Main app button pressed: {event.button.id}")
         
-        if not self.is_connected and event.button.id != "quit-btn":
+        if event.button.id == "quit-main-btn":
+            self.action_quit()
+            return
+        
+        if not self.is_connected and event.button.id not in ["quit-btn", "quit-main-btn"]:
             self.add_chat_message("SYSTEM", "❌ Please connect first!")
             return
         
@@ -412,22 +622,20 @@ class WorkingP2PChatApp(App):
                 return
             
             message_input.value = ""  # Clear input
-            
-            if PEER_AVAILABLE and self.is_connected:
-                # Send actual P2P message
-                try:
-                    sent_count = self.message_handler.send_post_message(content)
-                    self.add_chat_message(f"{self.username} (YOU)", content)
-                    self.add_chat_message("SYSTEM", f"📡 Message broadcast to {sent_count} peers")
-                except Exception as e:
-                    self.add_chat_message("SYSTEM", f"❌ Send error: {e}")
-            else:
-                # Demo mode
-                self.add_chat_message(f"{self.username} (DEMO)", content)
-                self.add_chat_message("SYSTEM", "📡 Demo message sent (P2P not available)")
+            self._send_post_message(content)
+            # Refocus input for continuous typing
+            message_input.focus()
         
         elif event.button.id == "dm-btn":
-            self.add_chat_message("SYSTEM", "💬 DM feature - Enter recipient as 'username@ip' in next message")
+            # Show DM screen
+            if PEER_AVAILABLE and self.is_connected:
+                peer_list = self.peer_manager.get_peer_list()
+                if peer_list:
+                    self.push_screen(DMScreen(self.peer_manager))
+                else:
+                    self.add_chat_message("SYSTEM", "❌ No peers available. Wait for peer discovery first.")
+            else:
+                self.add_chat_message("SYSTEM", "❌ P2P system not available for DM")
         
         elif event.button.id == "profile-btn":
             self.add_chat_message("SYSTEM", "👤 Profile feature - Share your profile with all peers")
@@ -441,23 +649,30 @@ class WorkingP2PChatApp(App):
                 except Exception as e:
                     self.add_chat_message("SYSTEM", f"❌ Profile error: {e}")
     
+    def on_dm_screen_dm_sent(self, message: DMScreen.DMSent) -> None:
+        """Handle DM sent from DM screen"""
+        if PEER_AVAILABLE and self.is_connected:
+            try:
+                success = self.message_handler.send_dm_message(message.recipient, message.message)
+                if success:
+                    self.add_chat_message(f"[DM TO {message.recipient}] {self.username}", message.message)
+                    self.add_chat_message("SYSTEM", f"📨 DM sent to {message.recipient}")
+                else:
+                    self.add_chat_message("SYSTEM", f"❌ Failed to send DM to {message.recipient}")
+            except Exception as e:
+                self.add_chat_message("SYSTEM", f"❌ DM error: {e}")
+        else:
+            self.add_chat_message("SYSTEM", "❌ P2P system not available")
+    
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key in message input"""
         if event.input.id == "message-input":
-            # Simulate clicking POST button
             content = event.value.strip()
             if content:
                 event.input.value = ""  # Clear input
-                # Manually trigger POST
-                if PEER_AVAILABLE and self.is_connected:
-                    try:
-                        sent_count = self.message_handler.send_post_message(content)
-                        self.add_chat_message(f"{self.username} (YOU)", content)
-                        self.add_chat_message("SYSTEM", f"📡 Message broadcast to {sent_count} peers")
-                    except Exception as e:
-                        self.add_chat_message("SYSTEM", f"❌ Send error: {e}")
-                else:
-                    self.add_chat_message(f"{self.username} (DEMO)", content)
+                self._send_post_message(content)
+                # Refocus the input for continuous typing
+                event.input.focus()
     
     def action_quit(self) -> None:
         """Quit the application"""
@@ -470,6 +685,48 @@ class WorkingP2PChatApp(App):
                 print(f"DEBUG: Error stopping P2P: {e}")
         
         self.exit()
+    
+    def action_send_message(self) -> None:
+        """Send message using Enter key"""
+        try:
+            message_input = self.query_one("#message-input", Input)
+            if message_input.value.strip():
+                # Trigger POST button
+                self._send_post_message(message_input.value.strip())
+                message_input.value = ""
+        except Exception as e:
+            print(f"DEBUG: Error in send_message action: {e}")
+    
+    def action_open_dm(self) -> None:
+        """Open DM dialog using Ctrl+D"""
+        try:
+            if PEER_AVAILABLE and self.is_connected:
+                peer_list = self.peer_manager.get_peer_list()
+                if peer_list:
+                    self.push_screen(DMScreen(self.peer_manager))
+                else:
+                    self.add_chat_message("SYSTEM", "❌ No peers available for DM")
+            else:
+                self.add_chat_message("SYSTEM", "❌ P2P system not available")
+        except Exception as e:
+            print(f"DEBUG: Error in open_dm action: {e}")
+    
+    def _send_post_message(self, content: str) -> None:
+        """Helper method to send POST messages"""
+        if not self.is_connected:
+            self.add_chat_message("SYSTEM", "❌ Please connect first!")
+            return
+        
+        if PEER_AVAILABLE and self.is_connected:
+            try:
+                sent_count = self.message_handler.send_post_message(content)
+                self.add_chat_message(f"{self.username} (YOU)", content)
+                self.add_chat_message("SYSTEM", f"📡 Message broadcast to {sent_count} peers")
+            except Exception as e:
+                self.add_chat_message("SYSTEM", f"❌ Send error: {e}")
+        else:
+            self.add_chat_message(f"{self.username} (DEMO)", content)
+            self.add_chat_message("SYSTEM", "📡 Demo message sent (P2P not available)")
 
 
 def main():

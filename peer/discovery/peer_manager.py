@@ -58,22 +58,19 @@ class PeerManager:
         while self.running:
             try:
                 if self.running:
-                    success = self.announce_presence()
-                    print(f"Discovery announcement sent: {success}")
+                    self.announce_presence()
                     self.cleanup_old_peers()
                     
                 # Check if we should continue running before sleeping
                 if self.running:
                     time.sleep(self.discovery_interval)
-            except Exception as e:
-                print(f"Error in discovery loop: {e}")
+            except Exception:
                 if self.running:
                     time.sleep(1)  # Short sleep before retry
     
     def announce_presence(self):
         """Broadcast presence announcement"""
         if not self.network_manager or not self.user_id:
-            print("Cannot announce presence: missing network manager or user ID")
             return False
         
         network_info = self.network_manager.get_network_info()
@@ -85,20 +82,13 @@ class PeerManager:
             'MESSAGE_ID': self._generate_message_id()
         }
         
-        print(f"Announcing presence as {self.user_id} on port {network_info['local_port']}")
         success = self.network_manager.broadcast_discovery(announcement)
-        
-        if not success:
-            print("Failed to broadcast discovery announcement")
-        
         return success
     
     def handle_peer_discovery(self, msg_dict, addr):
         """Handle incoming peer discovery messages"""
         sender_id = msg_dict.get('USER_ID', '')
         if sender_id and sender_id != self.user_id:
-            print(f"Received discovery from {sender_id} at {addr}")
-            
             # Check if this is a new peer (not already known)
             is_new_peer = sender_id not in self.known_peers
             
@@ -111,12 +101,7 @@ class PeerManager:
             
             # Only trigger callback for newly discovered peers
             if is_new_peer and self.on_peer_discovered:
-                print(f"New peer discovered: {sender_id}")
                 self.on_peer_discovered(sender_id)
-            
-            print(f"Total known peers: {len(self.known_peers)}")
-        elif sender_id == self.user_id:
-            print(f"Ignoring own discovery message from {addr}")
     
     def send_discovery_response(self, target_ip, target_port):
         """Send discovery response to a specific peer"""

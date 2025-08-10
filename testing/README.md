@@ -10,17 +10,32 @@ This directory contains all test scripts for the CSNETWK.MP project. All scripts
 - **`test_dm.py`** - Tests Direct Message (DM) functionality
 - **`test_profile.py`** - Tests PROFILE message functionality with avatar support
 - **`test_p2p.py`** - Tests Peer-to-Peer architecture functionality
+- **`test_modular_components.py`** - Tests modular component integration
+- **`test_modular_discovery.py`** - Tests modular peer discovery functionality
 
-### Display and UI Tests
+### Networking and Socket Tests
+- **`test_socket_fix.py`** - Tests Windows socket error handling fixes
+- **`test_peer_discovery.py`** - Tests peer discovery protocol functionality
+- **`simple_peer_test.py`** - Simple dual-peer discovery test for multiple terminals
+
+### UI and Interface Tests
 - **`test_verbose_mode.py`** - Simulates verbose vs non-verbose mode displays
+- **`test_enhanced_ui.py`** - Tests enhanced textual UI functionality
+- **`test_input_functionality.py`** - Tests input field functionality in textual UI
 - **`demo_verbose_modes.py`** - Interactive demo showing mode differences
+
+### Performance and Comparison Tests
+- **`test_silent_peer.py`** - Tests peer functionality with minimal output
+- **`compare_discovery_implementations.py`** - Compares different discovery implementations
+- **`compare_implementations.py`** - General implementation comparison tests
 
 ### Utility Scripts
 - **`create_test_avatar.py`** - Utility for creating test avatar images (placeholder)
 - **`run_all_tests.py`** - Runs all tests and provides a summary report
 
-### Legacy Test
-- **`test.py`** - Original test file (pre-existing)
+### Documentation
+- **`INPUT_FIELD_IMPLEMENTATION.md`** - Documentation of input field enhancements
+- **`FILE_MIGRATION_SUMMARY.md`** - Summary of file migration processes
 
 ## How to Run Tests
 

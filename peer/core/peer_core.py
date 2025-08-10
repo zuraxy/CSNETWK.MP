@@ -43,17 +43,29 @@ class UDPPeerModular:
         """Start the peer with all its components"""
         try:
             # Get user information
-            username = input("Username: ")
+            try:
+                username = input("Username: ").strip()
+            except EOFError:
+                print("No username provided, using default.")
+                username = "anonymous"
+            
+            if not username:
+                username = "anonymous"
+                
             network_info = self.network_manager.get_network_info()
             user_id = f"{username}@{network_info['local_ip']}"
             self.peer_manager.set_user_id(user_id)
             
             # Configure verbose mode
-            verbose_input = input(f"Enable verbose mode? (y/n, default={'y' if DEFAULT_VERBOSE_MODE else 'n'}): ").strip().lower()
+            try:
+                verbose_input = input(f"Enable verbose mode? (y/n, default={'y' if DEFAULT_VERBOSE_MODE else 'n'}): ").strip().lower()
+            except EOFError:
+                verbose_input = ''
+                
             if verbose_input == '':
                 verbose_mode = DEFAULT_VERBOSE_MODE
             else:
-                verbose_mode = verbose_input != 'n'
+                verbose_mode = verbose_input not in ['n', 'no', 'false']
             self.message_handler.set_verbose_mode(verbose_mode)
             
             print(f"Verbose mode: {'ON' if verbose_mode else 'OFF'}")
@@ -71,8 +83,12 @@ class UDPPeerModular:
             
         except KeyboardInterrupt:
             print("\nShutting down...")
+        except EOFError:
+            print("\nInput ended, shutting down...")
         except Exception as e:
             print(f"Error starting peer: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             self.shutdown()
     

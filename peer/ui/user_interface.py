@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+"""
+User Interface Module
+Handles user interaction and command processing
+"""
+import os
+import base64
+import mimetypes
+
 # Add at top of file
 from peer.config.settings import DEFAULT_VERBOSE_MODE
 
@@ -16,33 +25,42 @@ class UserInterface:
         """Start the main command processing loop"""
         print(f"\nPeer-to-Peer Chat Ready!")
         print(f"Commands: POST, DM, PROFILE, LIST, VERBOSE, QUIT")
+        print(f"Verbose mode: {'ON' if self.message_handler.verbose_mode else 'OFF'}")
         
         self.running = True
         while self.running:
             try:
                 cmd = input("\nCommand (POST/DM/PROFILE/LIST/VERBOSE/QUIT): ").strip().upper()
                 
-                if cmd == "QUIT":
+                if cmd == "QUIT" or cmd == "Q":
                     print("Goodbye!")
                     self.running = False
-                elif cmd == "VERBOSE":
+                elif cmd == "VERBOSE" or cmd == "V":
                     self._handle_verbose_command()
-                elif cmd == "POST":
+                elif cmd == "POST" or cmd == "P":
                     self._handle_post_command()
-                elif cmd == "DM":
+                elif cmd == "DM" or cmd == "D":
                     self._handle_dm_command()
-                elif cmd == "PROFILE":
+                elif cmd == "PROFILE" or cmd == "PROF":
                     self._handle_profile_command()
-                elif cmd == "LIST":
+                elif cmd == "LIST" or cmd == "L":
                     self._handle_list_command()
+                elif cmd == "":
+                    # Empty command, just continue
+                    continue
                 else:
                     print("Invalid command. Use POST, DM, PROFILE, LIST, VERBOSE, or QUIT")
+                    print("You can also use single letters: P, D, L, V, Q")
                     
             except KeyboardInterrupt:
                 print("\nGoodbye!")
                 self.running = False
+            except EOFError:
+                print("\nGoodbye!")
+                self.running = False
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"Command error: {e}")
+                print("Please try again...")
     
     def stop(self):
         """Stop the command loop"""
