@@ -430,16 +430,37 @@ class MessageHandler:
         
         # Create token with follow scope
         token = self.peer_manager.create_token("follow")
+        message_id = self._generate_message_id()
+        timestamp = str(int(time.time()))
         
+        # Format according to the specified order
         message = {
             'TYPE': 'FOLLOW',
+            'MESSAGE_ID': message_id,
             'FROM': self.peer_manager.user_id,
             'TO': target_user_id,
-            'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': self._generate_message_id(),
+            'TIMESTAMP': timestamp,
             'TOKEN': token
         }
         
+        # Log the message if in verbose mode
+        if self.verbose_mode:
+            import datetime
+            ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            peer_info = self.peer_manager.get_peer_info(target_user_id)
+            if peer_info:
+                print(f"\nSEND > [{ts_str}] To {peer_info['ip']} | Type: FOLLOW")
+                print(f"TYPE: FOLLOW")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"FROM: {self.peer_manager.user_id}")
+                print(f"TO: {target_user_id}")
+                print(f"TIMESTAMP: {timestamp}")
+                print(f"TOKEN: {token}")
+        
+        peer_info = self.peer_manager.get_peer_info(target_user_id)
+        if peer_info:
+            return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+        return False
         peer_info = self.peer_manager.get_peer_info(target_user_id)
         if peer_info:
             return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
@@ -454,13 +475,34 @@ class MessageHandler:
         if not self.peer_manager.is_following(target_user_id):
             return False
             
+        # Create token with follow scope (uses same scope as follow)
+        token = self.peer_manager.create_token("follow")
+        message_id = self._generate_message_id()
+        timestamp = str(int(time.time()))
+        
+        # Format according to the specified order
         message = {
             'TYPE': 'UNFOLLOW',
+            'MESSAGE_ID': message_id,
             'FROM': self.peer_manager.user_id,
             'TO': target_user_id,
-            'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': self._generate_message_id()
+            'TIMESTAMP': timestamp,
+            'TOKEN': token
         }
+        
+        # Log the message if in verbose mode
+        if self.verbose_mode:
+            import datetime
+            ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            peer_info = self.peer_manager.get_peer_info(target_user_id)
+            if peer_info:
+                print(f"\nSEND > [{ts_str}] To {peer_info['ip']} | Type: UNFOLLOW")
+                print(f"TYPE: UNFOLLOW")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"FROM: {self.peer_manager.user_id}")
+                print(f"TO: {target_user_id}")
+                print(f"TIMESTAMP: {timestamp}")
+                print(f"TOKEN: {token}")
         
         peer_info = self.peer_manager.get_peer_info(target_user_id)
         if peer_info:
@@ -471,15 +513,33 @@ class MessageHandler:
         """Send a response to a follow request"""
         if not self.peer_manager.is_peer_known(target_user_id):
             return False
+        
+        message_id = self._generate_message_id()
+        timestamp = str(int(time.time()))
             
+        # Format according to the specified order
         message = {
             'TYPE': 'FOLLOW_RESPONSE',
+            'MESSAGE_ID': message_id,
             'FROM': self.peer_manager.user_id,
             'TO': target_user_id,
-            'STATUS': str(status).lower(),
-            'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': self._generate_message_id()
+            'TIMESTAMP': timestamp,
+            'STATUS': str(status).lower()
         }
+        
+        # Log the message if in verbose mode
+        if self.verbose_mode:
+            import datetime
+            ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            peer_info = self.peer_manager.get_peer_info(target_user_id)
+            if peer_info:
+                print(f"\nSEND > [{ts_str}] To {peer_info['ip']} | Type: FOLLOW_RESPONSE")
+                print(f"TYPE: FOLLOW_RESPONSE")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"FROM: {self.peer_manager.user_id}")
+                print(f"TO: {target_user_id}")
+                print(f"TIMESTAMP: {timestamp}")
+                print(f"STATUS: {str(status).lower()}")
         
         peer_info = self.peer_manager.get_peer_info(target_user_id)
         if peer_info:
@@ -490,15 +550,33 @@ class MessageHandler:
         """Send a response to an unfollow request"""
         if not self.peer_manager.is_peer_known(target_user_id):
             return False
+        
+        message_id = self._generate_message_id()
+        timestamp = str(int(time.time()))
             
+        # Format according to the specified order
         message = {
             'TYPE': 'UNFOLLOW_RESPONSE',
+            'MESSAGE_ID': message_id,
             'FROM': self.peer_manager.user_id,
             'TO': target_user_id,
-            'STATUS': str(status).lower(),
-            'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': self._generate_message_id()
+            'TIMESTAMP': timestamp,
+            'STATUS': str(status).lower()
         }
+        
+        # Log the message if in verbose mode
+        if self.verbose_mode:
+            import datetime
+            ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            peer_info = self.peer_manager.get_peer_info(target_user_id)
+            if peer_info:
+                print(f"\nSEND > [{ts_str}] To {peer_info['ip']} | Type: UNFOLLOW_RESPONSE")
+                print(f"TYPE: UNFOLLOW_RESPONSE")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"FROM: {self.peer_manager.user_id}")
+                print(f"TO: {target_user_id}")
+                print(f"TIMESTAMP: {timestamp}")
+                print(f"STATUS: {str(status).lower()}")
         
         peer_info = self.peer_manager.get_peer_info(target_user_id)
         if peer_info:
@@ -872,9 +950,12 @@ class MessageHandler:
                     ts_str = "N/A"
                 print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
                 print(f"TYPE: {msg_type}")
+                print(f"MESSAGE_ID: {message_id}")
                 print(f"FROM: {from_user}")
                 print(f"TO: {to_user}")
-                print(f"MESSAGE_ID: {message_id}")
+                print(f"TIMESTAMP: {timestamp}")
+                if token:
+                    print(f"TOKEN: {token}")
                 print(f"✅ {from_user} is now following you")
             else:
                 display_name = self.peer_manager.get_display_name(from_user)
@@ -889,6 +970,14 @@ class MessageHandler:
         timestamp = msg_dict.get('TIMESTAMP', None)
         msg_type = msg_dict.get('TYPE', 'UNFOLLOW')
         message_id = msg_dict.get('MESSAGE_ID', '')
+        token = msg_dict.get('TOKEN', '')
+        
+        # Validate token
+        is_valid, reason = self.validate_message_token(msg_dict, addr[0])
+        if not is_valid:
+            if self.verbose_mode:
+                print(f"\n[REJECTED] UNFOLLOW from {from_user} - Invalid token: {reason}")
+            return
 
         # Only process if this message is for us
         if to_user == self.peer_manager.user_id:
@@ -909,9 +998,12 @@ class MessageHandler:
                     ts_str = "N/A"
                 print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
                 print(f"TYPE: {msg_type}")
+                print(f"MESSAGE_ID: {message_id}")
                 print(f"FROM: {from_user}")
                 print(f"TO: {to_user}")
-                print(f"MESSAGE_ID: {message_id}")
+                print(f"TIMESTAMP: {timestamp}")
+                if 'TOKEN' in msg_dict:
+                    print(f"TOKEN: {msg_dict.get('TOKEN')}")
                 print(f"✅ {from_user} has unfollowed you")
             else:
                 display_name = self.peer_manager.get_display_name(from_user)
@@ -945,10 +1037,11 @@ class MessageHandler:
                         ts_str = "N/A"
                     print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
                     print(f"TYPE: {msg_type}")
+                    print(f"MESSAGE_ID: {message_id}")
                     print(f"FROM: {from_user}")
                     print(f"TO: {to_user}")
+                    print(f"TIMESTAMP: {timestamp}")
                     print(f"STATUS: {status}")
-                    print(f"MESSAGE_ID: {message_id}")
                     print(f"✅ You are now following {from_user}")
                 else:
                     display_name = self.peer_manager.get_display_name(from_user)
@@ -988,10 +1081,11 @@ class MessageHandler:
                         ts_str = "N/A"
                     print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
                     print(f"TYPE: {msg_type}")
+                    print(f"MESSAGE_ID: {message_id}")
                     print(f"FROM: {from_user}")
                     print(f"TO: {to_user}")
+                    print(f"TIMESTAMP: {timestamp}")
                     print(f"STATUS: {status}")
-                    print(f"MESSAGE_ID: {message_id}")
                     print(f"✅ You have unfollowed {from_user}")
                 else:
                     display_name = self.peer_manager.get_display_name(from_user)

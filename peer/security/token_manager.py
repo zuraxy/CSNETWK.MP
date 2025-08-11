@@ -102,10 +102,10 @@ class TokenManager:
                 return False, "Token revoked"
             
             # Verify IP match if needed
-            if peer_ip and '@' in user_id:
-                token_ip = user_id.split('@')[1]
-                if token_ip != peer_ip:
-                    return False, "IP mismatch"
+            #if peer_ip and '@' in user_id:
+            #    token_ip = user_id.split('@')[1]
+            #    if token_ip != peer_ip:
+            #        return False, "IP mismatch"
             
             # Check scope if required
             if required_scope and token_scope != required_scope:
