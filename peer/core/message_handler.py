@@ -509,15 +509,21 @@ class MessageHandler:
         # Get the group name
         group_name = self.peer_manager.get_group_name(group_id) or group_id
         
+        # Generate timestamp
+        timestamp = int(time.time())
+        
         # Prepare message
         message = {
             'TYPE': 'GROUP_MESSAGE',
             'FROM': self.peer_manager.user_id,
             'GROUP_ID': group_id,
             'CONTENT': content,
-            'TIMESTAMP': str(int(time.time())),
+            'TIMESTAMP': str(timestamp),
             'MESSAGE_ID': self._generate_message_id()
         }
+        
+        # Store the message locally
+        self.peer_manager.store_group_message(group_id, self.peer_manager.user_id, content, timestamp)
         
         # Process locally first (show in own chat)
         self.handle_group_message(message, ('127.0.0.1', 0))
@@ -602,6 +608,101 @@ class MessageHandler:
                 
         print(f"===== End of Messages ({len(messages)} total) =====")
         return True, f"Found {len(messages)} messages with {peer_id}"
+        
+    def list_my_groups(self):
+        """List all groups the user belongs to"""
+        my_groups = self.peer_manager.get_my_groups()
+        
+        if not my_groups:
+            print("You are not a member of any groups.")
+            return False, "No groups found"
+            
+        print(f"\n===== Your Groups ({len(my_groups)}) =====")
+        for i, group_id in enumerate(my_groups, 1):
+            group = self.peer_manager.get_group(group_id)
+            if not group:
+                continue
+                
+            creator_status = " (Creator)" if group['creator'] == self.peer_manager.user_id else ""
+            member_count = len(group['members'])
+            message_count = len(self.peer_manager.group_messages.get(group_id, []))
+            
+            print(f"{i}. {group['name']} (ID: {group_id}){creator_status}")
+            print(f"   Members: {member_count} | Messages: {message_count}")
+            
+        print("===== End of Groups =====")
+        return True, f"Found {len(my_groups)} groups"
+        
+    def show_group_members(self, group_id):
+        """Show all members of a specific group"""
+        group = self.peer_manager.get_group(group_id)
+        if not group:
+            print(f"Group {group_id} not found")
+            return False, "Group not found"
+            
+        # Show group details
+        creator_id = group['creator']
+        creator_name = self.peer_manager.get_display_name(creator_id) or creator_id
+        
+        print(f"\n===== Group: {group['name']} (ID: {group_id}) =====")
+        print(f"Created by: {creator_name} ({creator_id})")
+        
+        # Format creation timestamp
+        created_at = group['created_at']
+        try:
+            created_str = datetime.datetime.fromtimestamp(int(created_at)).strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            created_str = str(created_at)
+        
+        print(f"Created on: {created_str}")
+        print(f"\nMembers ({len(group['members'])}):")
+        
+        # List all members
+        for member_id in group['members']:
+            display_name = self.peer_manager.get_display_name(member_id) or member_id
+            you_marker = " (You)" if member_id == self.peer_manager.user_id else ""
+            creator_marker = " (Creator)" if member_id == creator_id else ""
+            print(f"  - {display_name} ({member_id}){you_marker}{creator_marker}")
+            
+        print("===== End of Members =====")
+        return True, f"Found {len(group['members'])} members in group {group_id}"
+        
+    def show_group_messages(self, group_id, limit=20):
+        """Show messages in a specific group"""
+        if not self.peer_manager.is_in_group(group_id):
+            print(f"You are not a member of group {group_id}")
+            return False, "Not a member of this group"
+            
+        messages = self.peer_manager.get_group_messages(group_id)
+        if not messages:
+            print(f"No messages found in group {group_id}")
+            return False, "No messages found"
+            
+        group_name = self.peer_manager.get_group_name(group_id) or group_id
+        
+        print(f"\n===== Messages in {group_name} (ID: {group_id}) =====")
+        
+        # Show only the last 'limit' messages if there are more
+        if len(messages) > limit:
+            print(f"Showing the last {limit} of {len(messages)} messages...")
+            messages = messages[-limit:]
+        
+        for msg in messages:
+            from_user = msg['from_user']
+            content = msg['content']
+            timestamp = msg['timestamp']
+            
+            # Format timestamp
+            ts_str = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Format sender info
+            display_name = self.peer_manager.get_display_name(from_user) or from_user
+            you_marker = " (You)" if from_user == self.peer_manager.user_id else ""
+            
+            print(f"[{ts_str}] {display_name}{you_marker}: {content}")
+            
+        print(f"===== End of Messages ({len(messages)} total) =====")
+        return True, f"Found {len(messages)} messages in group {group_id}"
         
     def _generate_token(self):
         """Generate a security token for messages"""
@@ -920,6 +1021,9 @@ class MessageHandler:
         if not self.peer_manager.is_in_group(group_id):
             # Not a member, ignore the message
             return
+            
+        # Store the group message
+        self.peer_manager.store_group_message(group_id, from_user, content, timestamp)
             
         # Get group and sender info
         group_name = self.peer_manager.get_group_name(group_id) or group_id

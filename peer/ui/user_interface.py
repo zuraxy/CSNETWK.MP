@@ -24,13 +24,13 @@ class UserInterface:
     def start_command_loop(self):
         """Start the main command processing loop"""
         print(f"\nPeer-to-Peer Chat Ready!")
-        print(f"Commands: POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GROUP, FEED, LIKE, VERBOSE, QUIT")
+        print(f"Commands: POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GROUP, GROUPVIEW, FEED, LIKE, VERBOSE, QUIT")
         print(f"Verbose mode: {'ON' if self.message_handler.verbose_mode else 'OFF'}")
         
         self.running = True
         while self.running:
             try:
-                cmd = input("\nCommand (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/FEED/LIKE/VERBOSE/QUIT): ").strip().upper()
+                cmd = input("\nCommand (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/GROUPVIEW/FEED/LIKE/VERBOSE/QUIT): ").strip().upper()
                 
                 if cmd == "QUIT" or cmd == "Q":
                     print("Goodbye!")
@@ -61,12 +61,14 @@ class UserInterface:
                     self._handle_followers_command()
                 elif cmd == "GROUP" or cmd == "G":
                     self._handle_group_command()
+                elif cmd == "GROUPVIEW" or cmd == "GV":
+                    self._handle_group_overview()
                 elif cmd == "":
                     # Empty command, just continue
                     continue
                 else:
-                    print("Invalid command. Use POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, GROUP, FEED, LIKE, VERBOSE, or QUIT")
-                    print("You can also use single letters: P, D, PROF, LS, UF, G, F, L, V, Q")
+                    print("Invalid command. Use POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, GROUP, GROUPVIEW, FEED, LIKE, VERBOSE, or QUIT")
+                    print("You can also use single letters: P, D, DL, PROF, LS, UF, G, GV, F, L, V, Q")
                     
             except KeyboardInterrupt:
                 print("\nGoodbye!")
@@ -362,11 +364,13 @@ class UserInterface:
         print("  3. MESSAGE - Send a message to a group")
         print("  4. LIST - List all your groups")
         print("  5. INFO - Show details about a specific group")
-        print("  6. LEAVE - Leave a group")
+        print("  6. MESSAGES - View messages in a specific group")
+        print("  7. LEAVE - Leave a group")
+        print("  8. OVERVIEW - Complete group overview")
         print("  0. Back to main menu")
         
         try:
-            choice = input("\nSelect option (0-6): ").strip()
+            choice = input("\nSelect option (0-8): ").strip()
             
             if choice == "1":
                 self._handle_group_create()
@@ -379,7 +383,11 @@ class UserInterface:
             elif choice == "5":
                 self._handle_group_info()
             elif choice == "6":
+                self._handle_group_view_messages()
+            elif choice == "7":
                 self._handle_group_leave()
+            elif choice == "8":
+                self._handle_group_overview()
             elif choice == "0":
                 return
             else:
@@ -481,43 +489,123 @@ class UserInterface:
     
     def _handle_group_list(self):
         """Handle listing all groups the user is a member of"""
-        my_groups = self.peer_manager.get_my_groups()
-        
-        if not my_groups:
-            print("You are not a member of any groups.")
-            return
-            
-        print(f"\nYour Groups ({len(my_groups)}):")
-        for i, group_id in enumerate(my_groups, 1):
-            group = self.peer_manager.get_group(group_id)
-            if not group:
-                continue
-                
-            creator_status = " (Creator)" if group['creator'] == self.peer_manager.user_id else ""
-            member_count = len(group['members'])
-            print(f"{i}. {group['name']} (ID: {group_id}){creator_status}")
-            print(f"   Members: {member_count}")
+        self.message_handler.list_my_groups()
             
     def _handle_group_info(self):
         """Handle showing details about a specific group"""
         # Get group ID
-        group_id = input("Enter group ID: ").strip()
-        if not group_id:
-            print("Group ID is required")
+        my_groups = self.peer_manager.get_my_groups()
+        if not my_groups:
+            print("You are not a member of any groups.")
             return
             
-        # Check if group exists
-        group = self.peer_manager.get_group(group_id)
-        if not group:
-            print(f"Group {group_id} not found")
+        # Print groups for selection
+        print("\nYour Groups:")
+        for i, group_id in enumerate(my_groups, 1):
+            group = self.peer_manager.get_group(group_id)
+            if not group:
+                continue
+            print(f"{i}. {group['name']} (ID: {group_id})")
+            
+        # Get group selection
+        selection = input("\nEnter group number or ID: ").strip()
+        
+        # Handle numeric selection
+        group_id = None
+        try:
+            idx = int(selection) - 1
+            if 0 <= idx < len(my_groups):
+                group_id = my_groups[idx]
+        except ValueError:
+            # Try direct ID input
+            group_id = selection
+            
+        if not group_id or group_id not in self.peer_manager.groups:
+            print(f"Invalid group selection")
             return
             
         # Show group details
-        creator_id = group['creator']
-        creator_name = self.peer_manager.get_display_name(creator_id) or creator_id
+        self.message_handler.show_group_members(group_id)
+    
+    def _handle_group_view_messages(self):
+        """Handle viewing messages in a specific group"""
+        # Get group ID
+        my_groups = self.peer_manager.get_my_groups()
+        if not my_groups:
+            print("You are not a member of any groups.")
+            return
+            
+        # Print groups for selection
+        print("\nYour Groups:")
+        for i, group_id in enumerate(my_groups, 1):
+            group = self.peer_manager.get_group(group_id)
+            if not group:
+                continue
+            message_count = len(self.peer_manager.group_messages.get(group_id, []))
+            print(f"{i}. {group['name']} (ID: {group_id}) - {message_count} messages")
+            
+        # Get group selection
+        selection = input("\nEnter group number or ID: ").strip()
         
-        print(f"\nGroup: {group['name']} (ID: {group_id})")
-        print(f"Created by: {creator_name} ({creator_id})")
+        # Handle numeric selection
+        group_id = None
+        try:
+            idx = int(selection) - 1
+            if 0 <= idx < len(my_groups):
+                group_id = my_groups[idx]
+        except ValueError:
+            # Try direct ID input
+            group_id = selection
+            
+        if not group_id or group_id not in self.peer_manager.groups:
+            print(f"Invalid group selection")
+            return
+            
+        # Get message limit
+        limit_input = input("Number of messages to show (default 20): ").strip()
+        try:
+            limit = int(limit_input) if limit_input else 20
+        except ValueError:
+            limit = 20
+            
+        # Show group messages
+        self.message_handler.show_group_messages(group_id, limit)
+            
+        # Print groups for selection
+        print("\nYour Groups:")
+        for i, group_id in enumerate(my_groups, 1):
+            group = self.peer_manager.get_group(group_id)
+            if not group:
+                continue
+            message_count = len(self.peer_manager.group_messages.get(group_id, []))
+            print(f"{i}. {group['name']} (ID: {group_id}) - {message_count} messages")
+            
+        # Get group selection
+        selection = input("\nEnter group number or ID: ").strip()
+        
+        # Handle numeric selection
+        group_id = None
+        try:
+            idx = int(selection) - 1
+            if 0 <= idx < len(my_groups):
+                group_id = my_groups[idx]
+        except ValueError:
+            # Try direct ID input
+            group_id = selection
+            
+        if not group_id or group_id not in self.peer_manager.groups:
+            print(f"Invalid group selection")
+            return
+            
+        # Get message limit
+        limit_input = input("Number of messages to show (default 20): ").strip()
+        try:
+            limit = int(limit_input) if limit_input else 20
+        except ValueError:
+            limit = 20
+            
+        # Show group messages
+        self.message_handler.show_group_messages(group_id, limit)
         
         # Format creation timestamp
         import datetime
@@ -534,7 +622,7 @@ class UserInterface:
         for member_id in group['members']:
             display_name = self.peer_manager.get_display_name(member_id) or member_id
             you_marker = " (You)" if member_id == self.peer_manager.user_id else ""
-            creator_marker = " (Creator)" if member_id == creator_id else ""
+            creator_marker = " (Creator)" if member_id == group['creator'] else ""
             print(f"  - {display_name} ({member_id}){you_marker}{creator_marker}")
             
     def _handle_group_leave(self):
@@ -561,6 +649,100 @@ class UserInterface:
         if confirm != 'y':
             print("Operation cancelled")
             return
+            
+        # Leave the group
+        success, message = self.peer_manager.leave_group(group_id)
+        if success:
+            print(f"You have left the group '{group['name']}'")
+        else:
+            print(f"Error: {message}")
+            
+    def _handle_group_overview(self):
+        """Handle complete group overview"""
+        # First, list all groups
+        my_groups = self.peer_manager.get_my_groups()
+        if not my_groups:
+            print("You are not a member of any groups.")
+            return
+            
+        print(f"\n===== GROUP OVERVIEW =====")
+        print(f"You are a member of {len(my_groups)} groups:")
+        
+        # For each group, show basic info and recent messages
+        for i, group_id in enumerate(my_groups, 1):
+            group = self.peer_manager.get_group(group_id)
+            if not group:
+                continue
+                
+            creator_status = " (Creator)" if group['creator'] == self.peer_manager.user_id else ""
+            member_count = len(group['members'])
+            message_count = len(self.peer_manager.group_messages.get(group_id, []))
+            
+            print(f"\n{i}. {group['name']} (ID: {group_id}){creator_status}")
+            print(f"   Members: {member_count} | Messages: {message_count}")
+            
+            # Show members
+            print(f"   Members:")
+            for j, member_id in enumerate(list(group['members'])[:5], 1):
+                display_name = self.peer_manager.get_display_name(member_id) or member_id
+                you_marker = " (You)" if member_id == self.peer_manager.user_id else ""
+                creator_marker = " (Creator)" if member_id == group['creator'] else ""
+                print(f"     {j}. {display_name}{you_marker}{creator_marker}")
+                
+            # Show more members indicator if needed
+            if len(group['members']) > 5:
+                print(f"     ... and {len(group['members']) - 5} more members")
+            
+            # Show last 3 messages if any
+            messages = self.peer_manager.get_group_messages(group_id)
+            if messages:
+                print(f"   Recent Messages:")
+                # Get last 3 messages
+                recent_msgs = sorted(messages, key=lambda x: x['timestamp'], reverse=True)[:3]
+                for msg in reversed(recent_msgs):
+                    from_user = msg['from_user']
+                    display_name = self.peer_manager.get_display_name(from_user) or from_user
+                    you_marker = " (You)" if from_user == self.peer_manager.user_id else ""
+                    
+                    # Format timestamp
+                    import datetime
+                    ts_str = datetime.datetime.fromtimestamp(msg['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+                    
+                    # Truncate content if too long
+                    content = msg['content']
+                    if len(content) > 50:
+                        content = content[:47] + "..."
+                        
+                    print(f"     [{ts_str}] {display_name}{you_marker}: {content}")
+                    
+                if len(messages) > 3:
+                    print(f"     ... and {len(messages) - 3} more messages")
+            else:
+                print(f"   No messages in this group yet")
+                
+        print(f"\n===== END OF GROUP OVERVIEW =====")
+        
+        # Ask if user wants to view details of a specific group
+        choice = input("\nView details of a specific group? Enter group number or ID (or press Enter to skip): ").strip()
+        if not choice:
+            return
+            
+        # Handle numeric selection
+        group_id = None
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(my_groups):
+                group_id = my_groups[idx]
+        except ValueError:
+            # Try direct ID input
+            group_id = choice
+            
+        if not group_id or group_id not in self.peer_manager.groups:
+            print(f"Invalid group selection")
+            return
+            
+        # Show submenu for selected group
+        self._handle_group_detail_submenu(group_id)
             
         # Leave group
         success, message = self.peer_manager.leave_group(group_id)
@@ -799,6 +981,40 @@ class UserInterface:
             print("Please enter a valid number")
         except Exception as e:
             print(f"Error: {e}")
+    
+    def _handle_group_detail_submenu(self, group_id):
+        """Handle detailed actions for a specific group"""
+        group = self.peer_manager.get_group(group_id)
+        if not group:
+            print(f"Group {group_id} not found")
+            return
+            
+        print(f"\n===== {group['name']} (ID: {group_id}) =====")
+        print("  1. View all members")
+        print("  2. View all messages")
+        print("  3. Send a message")
+        print("  0. Back to group overview")
+        
+        choice = input("\nSelect option (0-3): ").strip()
+        
+        if choice == "1":
+            self.message_handler.show_group_members(group_id)
+        elif choice == "2":
+            self.message_handler.show_group_messages(group_id)
+        elif choice == "3":
+            # Get message content
+            content = input("Enter message: ").strip()
+            if not content:
+                print("Message content is required")
+                return
+                
+            # Send the message
+            sent_count = self.message_handler.send_group_message(group_id, content)
+            print(f"Message sent to {sent_count} group members")
+        elif choice == "0":
+            return
+        else:
+            print("Invalid choice")
     
     def _handle_feed_command(self):
         """Display posts from users, with options to like/unlike"""

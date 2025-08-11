@@ -29,6 +29,7 @@ class PeerManager:
         # Group chat functionality
         self.groups = {}  # group_id -> {'name': str, 'creator': user_id, 'members': set(), 'created_at': timestamp}
         self.created_groups = set()  # Set of group_ids I've created
+        self.group_messages = {}  # group_id -> [{'from_user': str, 'content': str, 'timestamp': int}]
         
         # Post likes functionality
         self.liked_posts = set()  # Set of post_timestamps I've liked
@@ -378,6 +379,51 @@ class PeerManager:
         """Get the creator of a group"""
         group = self.groups.get(group_id)
         return group['creator'] if group else None
+        
+    def store_group_message(self, group_id, from_user, content, timestamp):
+        """Store a group message"""
+        # Convert timestamp to int if it's a string
+        if isinstance(timestamp, str):
+            try:
+                timestamp = int(timestamp)
+            except ValueError:
+                timestamp = int(time.time())
+                
+        # Create message object
+        message = {
+            'from_user': from_user,
+            'content': content,
+            'timestamp': timestamp
+        }
+        
+        # Initialize group message list if needed
+        if group_id not in self.group_messages:
+            self.group_messages[group_id] = []
+            
+        # Store the message
+        self.group_messages[group_id].append(message)
+        
+    def get_group_messages(self, group_id):
+        """Get all messages for a specific group"""
+        if group_id not in self.group_messages:
+            return []
+            
+        # Sort messages by timestamp
+        messages = sorted(self.group_messages[group_id], key=lambda x: x['timestamp'])
+        return messages
+        
+    def get_unread_group_messages(self, group_id, last_read_timestamp=0):
+        """Get unread messages for a specific group"""
+        if group_id not in self.group_messages:
+            return []
+            
+        # Filter messages newer than last_read_timestamp
+        unread = [msg for msg in self.group_messages[group_id] 
+                 if msg['timestamp'] > last_read_timestamp]
+                 
+        # Sort by timestamp
+        unread = sorted(unread, key=lambda x: x['timestamp'])
+        return unread
     
     def is_group_member(self, group_id, user_id=None):
         """Check if a user is a member of a group"""
