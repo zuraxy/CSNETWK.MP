@@ -167,8 +167,10 @@ class NetworkManager:
         try:
             encoded_data = Protocol.encode_message(message)
             # Broadcast to local network using configured addresses
+            # Skip localhost (127.0.0.1) to avoid receiving our own messages
             for address in BROADCAST_ADDRESSES:
-                self.socket.sendto(encoded_data, (address, self.discovery_port))
+                if address != '127.0.0.1':  # Skip localhost
+                    self.socket.sendto(encoded_data, (address, self.discovery_port))
             return True
         except Exception as e:
             print(f"Error broadcasting discovery: {e}")

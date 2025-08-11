@@ -122,9 +122,19 @@ class PeerManager:
             print(f"TYPE: PING")
             print(f"USER_ID: {self.user_id}")
         
-        # Broadcast PING to all known peers
-        success = self.network_manager.broadcast_discovery(ping_message)
-        return success
+        # Send ping directly to each known peer instead of broadcasting
+        # This is more efficient and avoids receiving our own messages
+        sent_count = 0
+        for peer_id, peer_info in self.known_peers.items():
+            if peer_id != self.user_id:  # Don't send to ourselves
+                if self.network_manager.send_to_address(ping_message, peer_info['ip'], peer_info['port']):
+                    sent_count += 1
+        
+        # If no known peers yet, use broadcast for discovery
+        if sent_count == 0:
+            return self.network_manager.broadcast_discovery(ping_message)
+            
+        return sent_count > 0  # Return success if at least one ping was sent
     
     def announce_presence(self):
         """Broadcast presence announcement"""
@@ -140,6 +150,8 @@ class PeerManager:
             'MESSAGE_ID': self._generate_message_id()
         }
         
+        # We can use broadcast_discovery here because handle_peer_discovery already has 
+        # a check to filter out messages from ourselves with sender_id != self.user_id
         success = self.network_manager.broadcast_discovery(announcement)
         return success
     

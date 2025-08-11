@@ -119,6 +119,10 @@ class MessageHandler:
         user_id = msg_dict.get('USER_ID', 'Unknown')
         timestamp = msg_dict.get('TIMESTAMP', None)
         
+        # Skip if the message is from ourselves
+        if user_id == self.peer_manager.user_id:
+            return
+        
         # Update peer information (similar to discovery but specifically for PING)
         self.peer_manager.update_peer_info(user_id, addr[0], addr[1])
         
