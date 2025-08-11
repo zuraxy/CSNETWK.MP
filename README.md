@@ -107,6 +107,6 @@ Peer A ────[direct msg]───► Specific Peer B
 
 ### Contributors
 - AQUINO, Bon Windel
+- CHAN, Enzo Rafael
 - DELA CRUZ, Karl Matthew 
-- ENZO, Rafael Chan
 - ESPINOSA, Jose Miguel  
