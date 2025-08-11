@@ -83,8 +83,15 @@ DiscoveryManager
 ### Core Commands
 - **POST**: Broadcast messages to all discovered peers
 - **DM**: Send direct messages to specific peers
+- **DMLIST**: View direct message history with a specific peer
 - **PROFILE**: Share profile (with optional avatar) with all peers
 - **LIST**: Show all discovered peers on the network
+- **FOLLOW/UNFOLLOW**: Follow or unfollow specific peers
+- **FOLLOWING/FOLLOWERS**: View your following/followers lists
+- **GROUP**: Create and manage group chats
+- **GROUPVIEW**: View all your groups, members, and messages
+- **FEED**: View your posts and liked posts
+- **LIKE**: Like, unlike, and view likes on posts
 - **VERBOSE**: Toggle between technical and user-friendly display
 - **QUIT**: Exit the peer application
 
@@ -92,6 +99,9 @@ DiscoveryManager
 - 🔍 **Automatic Peer Discovery**: Peers find each other via UDP broadcast
 - 💬 **Direct Communication**: No relay through central server
 - 📷 **Avatar Support**: Profile pictures in base64 encoding
+- 👥 **Group Chat**: Create groups, send messages to multiple peers simultaneously, and view detailed group overviews
+- 👍 **Social Interactions**: Like/unlike posts and track engagement
+- 🎮 **Games**: Built-in Rock Paper Scissors game with history tracking and leaderboard
 - 🎛️ **Verbose/Clean Modes**: Technical details or user-friendly display
 - 🌐 **Network Resilience**: Self-healing peer topology
 
@@ -128,19 +138,19 @@ Verbose mode: OFF
 Peer started as alice@192.168.1.11
 Listening on 192.168.1.11:8445
 
-Commands: POST, DM, PROFILE, LIST, VERBOSE, QUIT
+Commands: POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, GROUP, GROUPVIEW, FEED, LIKE, VERBOSE, QUIT
 ```
 
 ### Broadcasting a Message
 ```
-Command (POST/DM/PROFILE/LIST/VERBOSE/QUIT): POST
+Command (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/GROUPVIEW/FEED/LIKE/VERBOSE/QUIT): POST
 Message: Hello everyone!
 Message broadcasted to 3 peers
 ```
 
 ### Direct Messaging
 ```
-Command (POST/DM/PROFILE/LIST/VERBOSE/QUIT): DM
+Command (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/GROUPVIEW/FEED/LIKE/VERBOSE/QUIT): DM
 Available peers:
   - bob@192.168.1.12 (Bob Smith)
   - charlie@192.168.1.13 (Charlie Wilson)
@@ -149,15 +159,87 @@ Message: Hey Bob, how are you?
 DM sent to bob@192.168.1.12
 ```
 
+### Viewing DM History
+```
+Command (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/GROUPVIEW/FEED/LIKE/VERBOSE/QUIT): DMLIST
+Peers with DM history:
+  1. bob@192.168.1.12 (Bob Smith) - 3 messages
+  2. charlie@192.168.1.13 (Charlie Wilson) - 1 messages
+
+Enter peer number or user@ip to view DMs: 1
+
+===== Direct Messages with Bob Smith (bob@192.168.1.12) =====
+[2025-08-10 14:32:15] You → Bob Smith: Hey Bob, how are you?
+[2025-08-10 14:33:22] Bob Smith → You: I'm good, Alice! How about you?
+[2025-08-10 14:35:05] You → Bob Smith: Doing great, thanks for asking!
+===== End of Messages (3 total) =====
+```
+
 ### Creating a Profile
 ```
-Command (POST/DM/PROFILE/LIST/VERBOSE/QUIT): PROFILE
+Command (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/GROUPVIEW/FEED/LIKE/VERBOSE/QUIT): PROFILE
 Display Name: Alice Johnson
 Status message: Exploring P2P networking!
 Add profile picture? (y/n): y
 Enter path to image file: avatar.png
 Avatar added: image/png, 1234 characters
 Profile updated and broadcasted to 3 peers
+```
+
+### Viewing Group Overview
+```
+Command (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/GROUPVIEW/FEED/LIKE/VERBOSE/QUIT): GROUPVIEW
+
+===== GROUP OVERVIEW =====
+You are a member of 2 groups:
+
+1. Project Team (ID: group123) (Creator)
+   Members: 5 | Messages: 12
+   Members:
+     1. Alice Johnson (You) (Creator)
+     2. Bob Smith
+     3. Charlie Wilson
+     4. Dana Lee
+     5. Ethan Parks
+   Recent Messages:
+     [2025-08-10 15:22:45] Charlie Wilson: When is our next meeting?
+     [2025-08-10 15:25:18] Bob Smith: Tomorrow at 3PM
+     [2025-08-10 15:26:05] You: Perfect, I'll prepare the slides
+
+2. Friends Chat (ID: group456)
+   Members: 3 | Messages: 8
+   Members:
+     1. Alice Johnson (You)
+     2. Bob Smith (Creator)
+     3. Dana Lee
+   Recent Messages:
+     [2025-08-10 16:10:22] Dana Lee: Anyone free this weekend?
+     [2025-08-10 16:11:45] You: I'm available Sunday afternoon!
+     [2025-08-10 16:12:30] Bob Smith: Sunday works for me too
+
+===== END OF GROUP OVERVIEW =====
+
+View details of a specific group? Enter group number or ID (or press Enter to skip): 1
+
+===== Project Team (ID: group123) =====
+  1. View all members
+  2. View all messages
+  3. Send a message
+  0. Back to group overview
+
+Select option (0-3): 2
+
+===== Messages in Project Team =====
+[2025-08-10 14:45:12] Alice Johnson: Welcome to our project team!
+[2025-08-10 14:50:33] Bob Smith: Thanks for setting this up, Alice!
+[2025-08-10 15:05:22] Dana Lee: Excited to work with everyone!
+[2025-08-10 15:10:45] Charlie Wilson: Let's get started on the planning
+[2025-08-10 15:15:18] Ethan Parks: I'll share my notes from last session
+[2025-08-10 15:20:30] Alice Johnson: Great idea, Ethan
+[2025-08-10 15:22:45] Charlie Wilson: When is our next meeting?
+[2025-08-10 15:25:18] Bob Smith: Tomorrow at 3PM
+[2025-08-10 15:26:05] Alice Johnson: Perfect, I'll prepare the slides
+===== End of Messages (9 total) =====
 ```
 
 ## File Structure

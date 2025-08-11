@@ -19,6 +19,9 @@ class PeerManager:
         self.known_peers = {}  # user_id -> {'ip': str, 'port': int, 'last_seen': timestamp}
         self.user_profiles = {}  # user_id -> {'display_name': str, 'avatar': bool, 'avatar_type': str}
         
+        # Direct message storage
+        self.direct_messages = {}  # user_id -> [{'content': str, 'timestamp': int, 'from_user': str, 'to_user': str}]
+        
         # Follow/Following functionality
         self.followers = set()  # Set of user_ids who follow me
         self.following = set()  # Set of user_ids I'm following
@@ -26,6 +29,13 @@ class PeerManager:
         # Group chat functionality
         self.groups = {}  # group_id -> {'name': str, 'creator': user_id, 'members': set(), 'created_at': timestamp}
         self.created_groups = set()  # Set of group_ids I've created
+        self.group_messages = {}  # group_id -> [{'from_user': str, 'content': str, 'timestamp': int}]
+        
+        # Post likes functionality
+        self.liked_posts = set()  # Set of post_timestamps I've liked
+        self.post_likes = {}  # post_timestamp -> set(user_ids who liked it)
+        self.my_posts = {}  # timestamp -> {'content': str, 'ttl': int, 'created_at': int}
+        self.received_posts = {}  # user_id -> {timestamp -> {'content': str, 'ttl': int, 'created_at': int}}
         
         # Discovery state
         self.user_id = ""
@@ -457,6 +467,51 @@ class PeerManager:
         """Get the creator of a group"""
         group = self.groups.get(group_id)
         return group['creator'] if group else None
+        
+    def store_group_message(self, group_id, from_user, content, timestamp):
+        """Store a group message"""
+        # Convert timestamp to int if it's a string
+        if isinstance(timestamp, str):
+            try:
+                timestamp = int(timestamp)
+            except ValueError:
+                timestamp = int(time.time())
+                
+        # Create message object
+        message = {
+            'from_user': from_user,
+            'content': content,
+            'timestamp': timestamp
+        }
+        
+        # Initialize group message list if needed
+        if group_id not in self.group_messages:
+            self.group_messages[group_id] = []
+            
+        # Store the message
+        self.group_messages[group_id].append(message)
+        
+    def get_group_messages(self, group_id):
+        """Get all messages for a specific group"""
+        if group_id not in self.group_messages:
+            return []
+            
+        # Sort messages by timestamp
+        messages = sorted(self.group_messages[group_id], key=lambda x: x['timestamp'])
+        return messages
+        
+    def get_unread_group_messages(self, group_id, last_read_timestamp=0):
+        """Get unread messages for a specific group"""
+        if group_id not in self.group_messages:
+            return []
+            
+        # Filter messages newer than last_read_timestamp
+        unread = [msg for msg in self.group_messages[group_id] 
+                 if msg['timestamp'] > last_read_timestamp]
+                 
+        # Sort by timestamp
+        unread = sorted(unread, key=lambda x: x['timestamp'])
+        return unread
     
     def is_group_member(self, group_id, user_id=None):
         """Check if a user is a member of a group"""
@@ -491,3 +546,183 @@ class PeerManager:
     def _generate_message_id(self):
         """Generate a unique message ID"""
         return secrets.token_hex(8)
+        
+    def store_direct_message(self, from_user, to_user, content, timestamp):
+        """Store a direct message"""
+        # Convert timestamp to int if it's a string
+        if isinstance(timestamp, str):
+            try:
+                timestamp = int(timestamp)
+            except ValueError:
+                timestamp = int(time.time())
+        
+        # Create message object
+        dm = {
+            'from_user': from_user,
+            'to_user': to_user,
+            'content': content,
+            'timestamp': timestamp
+        }
+        
+        # Store based on the other party (whether sent or received)
+        other_party = from_user if to_user == self.user_id else to_user
+        
+        if other_party not in self.direct_messages:
+            self.direct_messages[other_party] = []
+        
+        self.direct_messages[other_party].append(dm)
+        
+    def get_direct_messages(self, peer_id):
+        """Get all direct messages exchanged with a specific peer"""
+        if peer_id not in self.direct_messages:
+            return []
+        
+        # Sort messages by timestamp
+        messages = sorted(self.direct_messages[peer_id], key=lambda x: x['timestamp'])
+        return messages
+        
+    # Post likes management
+    def add_post(self, timestamp, content, ttl=3600):
+        """Track a post created by the user
+        
+        Args:
+            timestamp (str): The timestamp when the post was created
+            content (str): The content of the post
+            ttl (int): Time To Live in seconds
+            
+        Returns:
+            bool: True if post was added successfully
+        """
+        created_at = int(timestamp)
+        self.my_posts[timestamp] = {
+            'content': content,
+            'ttl': int(ttl),
+            'created_at': created_at
+        }
+        return True
+        
+    def add_received_post(self, user_id, timestamp, content, ttl=3600):
+        """Track a post received from another user
+        
+        Args:
+            user_id (str): The ID of the user who sent the post
+            timestamp (str): The timestamp when the post was created
+            content (str): The content of the post
+            ttl (int): Time To Live in seconds
+            
+        Returns:
+            bool: True if post was added successfully
+        """
+        if user_id not in self.received_posts:
+            self.received_posts[user_id] = {}
+            
+        created_at = int(timestamp)
+        self.received_posts[user_id][timestamp] = {
+            'content': content,
+            'ttl': int(ttl),
+            'created_at': created_at
+        }
+        return True
+        
+    def get_user_posts(self, user_id):
+        """Get posts from a specific user, filtering out expired posts
+        
+        Args:
+            user_id (str): The ID of the user whose posts to get
+            
+        Returns:
+            dict: Dictionary of timestamp -> post data
+        """
+        # Get current time
+        current_time = int(time.time())
+        
+        if user_id == self.user_id:
+            # Filter out expired posts
+            valid_posts = {}
+            for timestamp, post_data in self.my_posts.items():
+                created_at = post_data['created_at']
+                ttl = post_data['ttl']
+                
+                # Check if post is still valid
+                if created_at + ttl > current_time:
+                    valid_posts[timestamp] = post_data
+                    
+            return valid_posts
+        else:
+            if user_id not in self.received_posts:
+                return {}
+                
+            # Filter out expired posts
+            valid_posts = {}
+            for timestamp, post_data in self.received_posts[user_id].items():
+                created_at = post_data['created_at']
+                ttl = post_data['ttl']
+                
+                # Check if post is still valid
+                if created_at + ttl > current_time:
+                    valid_posts[timestamp] = post_data
+                    
+            return valid_posts
+        
+    def like_post(self, post_author, post_timestamp):
+        """Like a post"""
+        # Track that the current user has liked this post
+        like_key = f"{post_author}:{post_timestamp}"
+        self.liked_posts.add(like_key)
+        
+        # Add the like to the post
+        if post_timestamp not in self.post_likes:
+            self.post_likes[post_timestamp] = set()
+        self.post_likes[post_timestamp].add(self.user_id)
+        
+        return True
+        
+    def unlike_post(self, post_author, post_timestamp):
+        """Unlike a post"""
+        # Remove from liked posts
+        like_key = f"{post_author}:{post_timestamp}"
+        if like_key in self.liked_posts:
+            self.liked_posts.remove(like_key)
+        
+        # Remove the like from the post
+        if post_timestamp in self.post_likes and self.user_id in self.post_likes[post_timestamp]:
+            self.post_likes[post_timestamp].remove(self.user_id)
+            
+        return True
+        
+    def has_liked_post(self, post_author, post_timestamp):
+        """Check if the user has liked a post"""
+        like_key = f"{post_author}:{post_timestamp}"
+        return like_key in self.liked_posts
+        
+    def get_post_likes(self, post_timestamp):
+        """Get users who liked a post"""
+        return self.post_likes.get(post_timestamp, set())
+        
+    def get_post_likes_count(self, post_timestamp):
+        """Get the number of likes for a post"""
+        return len(self.post_likes.get(post_timestamp, set()))
+        
+    def get_post_content(self, post_timestamp):
+        """Get the content of a post
+        
+        Args:
+            post_timestamp (str): The timestamp of the post
+            
+        Returns:
+            str: The content of the post, or empty string if not found or expired
+        """
+        # Check if post exists
+        post = self.my_posts.get(post_timestamp)
+        if not post:
+            return ""
+            
+        # Check if post is expired
+        current_time = int(time.time())
+        created_at = post['created_at']
+        ttl = post['ttl']
+        
+        if created_at + ttl <= current_time:
+            return ""  # Post expired
+            
+        return post['content']
