@@ -23,31 +23,6 @@ python run_peer.py
 python run_peer.py
 ```
 
-### Alternative Modular Launcher
-```bash
-# Terminal 1
-python run_peer_modular.py
-
-# Terminal 2  
-python run_peer_modular.py
-
-# Terminal 3
-python run_peer_modular.py
-```
-
-### Test Peer Discovery
-```bash
-python peer/discover_peers_modular.py
-```
-
-### Run All Tests
-```bash
-cd testing
-python run_all_tests.py
-python test_modular_components.py
-python compare_implementations.py
-```
-
 ## Architecture
 
 This implementation uses a **clean modular architecture** with separated concerns:
@@ -93,6 +68,8 @@ DiscoveryManager
 - **FEED**: View your posts and liked posts
 - **LIKE**: Like, unlike, and view likes on posts
 - **VERBOSE**: Toggle between technical and user-friendly display
+- **GAME**: Play Tic Tac Toe
+- **FILE**: Send files to peer
 - **QUIT**: Exit the peer application
 
 ### Key Features
@@ -127,3 +104,9 @@ Peer A ────[direct msg]───► Specific Peer B
       │     ╲╱     │
     Peer D ────── Peer C
 ```
+
+### Contributors
+- AQUINO, Bon Windel
+- DELA CRUZ, Karl Matthew 
+- ENZO, Rafael Chan
+- ESPINOSA, Jose Miguel  
