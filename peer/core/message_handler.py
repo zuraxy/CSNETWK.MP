@@ -10,6 +10,12 @@ import sys
 import os
 import datetime
 import base64
+import threading
+
+# For TTL
+from peer.config.settings import (
+    DEFAULT_POST_TTL, TTL_CLEANUP_INTERVAL
+)
 
 # Add parent directories to path for protocol access
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -34,7 +40,14 @@ class MessageHandler:
         self.peer_manager = peer_manager
         self.verbose_mode = verbose_mode
         
-        # Register message handlers with network manager
+        # Add message cache with TTL support
+        self.message_cache = {}  # message_id -> (message_dict, expiry_time)
+        
+        # Start TTL cleanup thread
+        self.ttl_cleanup_thread = threading.Thread(target=self._ttl_cleanup_loop)
+        self.ttl_cleanup_thread.daemon = True
+        self.ttl_cleanup_thread.start()
+        
         self._register_handlers()
     
     def _register_handlers(self):
@@ -93,18 +106,32 @@ class MessageHandler:
         avatar_encoding = msg_dict.get('AVATAR_ENCODING', '')
         avatar_data = msg_dict.get('AVATAR_DATA', '')
         timestamp = msg_dict.get('TIMESTAMP', None)
+        ttl = msg_dict.get('TTL', str(DEFAULT_PROFILE_TTL))
+        message_id = msg_dict.get('MESSAGE_ID', '')
         msg_type = msg_dict.get('TYPE', 'PROFILE')
+
+        # Check TTL
+        if not self._is_message_valid(timestamp, ttl):
+            if self.verbose_mode:
+                print(f"\n[EXPIRED] PROFILE from {user_id} has expired - TTL: {ttl}")
+            return
 
         # Update profile storage
         self.peer_manager.update_user_profile(user_id, display_name, has_avatar, avatar_type)
+
+        # Store valid message with expiry
+        if message_id:
+            self._store_message(message_id, msg_dict)
 
         if self.verbose_mode:
             # Format timestamp
             if timestamp:
                 try:
                     ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    expiry_time = datetime.datetime.fromtimestamp(int(timestamp) + int(ttl)).strftime('%Y-%m-%d %H:%M:%S')
                 except Exception:
                     ts_str = str(timestamp)
+                    expiry_time = str(timestamp)
             else:
                 ts_str = "N/A"
             print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
@@ -112,6 +139,7 @@ class MessageHandler:
             print(f"USER_ID: {user_id}")
             print(f"DISPLAY_NAME: {display_name}")
             print(f"STATUS: {status}")
+            print(f"TTL: {ttl} (Expires: {expiry_time})")
             if has_avatar:
                 print(f"AVATAR_TYPE: {avatar_type}")
                 print(f"AVATAR_ENCODING: {avatar_encoding}")
@@ -133,6 +161,22 @@ class MessageHandler:
         message_id = msg_dict.get('MESSAGE_ID', '')
         token = msg_dict.get('TOKEN', '')
         
+        # Check TTL
+        if not self._is_message_valid(timestamp, ttl):
+            if self.verbose_mode:
+                print(f"\n[EXPIRED] POST from {user_id} has expired - TTL: {ttl}")
+            return
+        
+        # Only process messages from users you follow (if not in verbose mode)
+        if not self.verbose_mode and not self.peer_manager.is_following(user_id):
+            if self.verbose_mode:
+                print(f"\n[FILTERED] POST from {user_id} ignored - not following this user")
+            return
+        
+        # Store valid message with expiry
+        if message_id:
+            self._store_message(message_id, msg_dict)
+
         # Only process messages from users you follow
         if not self.peer_manager.is_following(user_id):
             if self.verbose_mode:
@@ -144,15 +188,17 @@ class MessageHandler:
             if timestamp:
                 try:
                     ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    expiry_time = datetime.datetime.fromtimestamp(int(timestamp) + int(ttl)).strftime('%Y-%m-%d %H:%M:%S')
                 except Exception:
                     ts_str = str(timestamp)
+                    expiry_time = str(timestamp)
             else:
                 ts_str = "N/A"
             print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
             print(f"TYPE: {msg_type}")
             print(f"USER_ID: {user_id}")
             print(f"CONTENT: {content}")
-            print(f"TTL: {ttl}")
+            print(f"TTL: {ttl} (Expires: {expiry_time})")
             print(f"MESSAGE_ID: {message_id}")
             print(f"TOKEN: {token}")
             # Example token validation (replace with your actual validation logic)
@@ -171,19 +217,32 @@ class MessageHandler:
         to_user = msg_dict.get('TO', '')
         content = msg_dict.get('CONTENT', '')
         timestamp = msg_dict.get('TIMESTAMP', None)
+        ttl = msg_dict.get('TTL', str(DEFAULT_DM_TTL))
         msg_type = msg_dict.get('TYPE', 'DM')
         message_id = msg_dict.get('MESSAGE_ID', '')
         token = msg_dict.get('TOKEN', '')
 
+        # Check TTL
+        if not self._is_message_valid(timestamp, ttl):
+            if self.verbose_mode:
+                print(f"\n[EXPIRED] DM from {from_user} has expired - TTL: {ttl}")
+            return
+
         # Only display if this message is for us
         if to_user == self.peer_manager.user_id:
+            # Store valid message with expiry
+            if message_id:
+                self._store_message(message_id, msg_dict)
+
             if self.verbose_mode:
                 # Format timestamp
                 if timestamp:
                     try:
                         ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                        expiry_time = datetime.datetime.fromtimestamp(int(timestamp) + int(ttl)).strftime('%Y-%m-%d %H:%M:%S')
                     except Exception:
                         ts_str = str(timestamp)
+                        expiry_time = str(timestamp)
                 else:
                     ts_str = "N/A"
                 print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
@@ -192,6 +251,7 @@ class MessageHandler:
                 print(f"TO: {to_user}")
                 print(f"CONTENT: {content}")
                 print(f"TIMESTAMP: {timestamp}")
+                print(f"TTL: {ttl} (Expires: {expiry_time})")
                 print(f"MESSAGE_ID: {message_id}")
                 print(f"TOKEN: {token}")
                 # Example token validation (replace with your actual validation logic)
@@ -234,13 +294,24 @@ class MessageHandler:
     
     def send_post_message(self, content):
         """Send a broadcast POST message to followers only"""
+        timestamp = int(time.time())
+        message_id = self._generate_message_id()
+
         message = {
             'TYPE': 'POST',
             'USER_ID': self.peer_manager.user_id,
             'CONTENT': content,
-            'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': self._generate_message_id()
+            'TIMESTAMP': str(timestamp),
+            'TTL': str(DEFAULT_POST_TTL),  
+            'MESSAGE_ID': message_id
         }
+
+        # Store the message locally with TTL
+        self._store_message(message_id, message)
+
+        encoded_msg = Protocol.encode_message(message)
+        
+        # REMOVE THIS LINE: self.network_manager.broadcast_message(encoded_msg)
         
         # Get only peers who follow you
         followers = self.peer_manager.get_followers()
@@ -250,7 +321,7 @@ class MessageHandler:
         for user_id in followers:
             if user_id in self.peer_manager.known_peers:
                 follower_peers[user_id] = self.peer_manager.known_peers[user_id]
-        
+                
         # If no followers, inform the user
         if not follower_peers:
             if self.verbose_mode:
@@ -307,19 +378,22 @@ class MessageHandler:
     
     def send_follow_request(self, target_user_id):
         """Send a follow request to another peer"""
-        if not self.peer_manager.is_peer_known(target_user_id):
-            return False
-        
+        timestamp = int(time.time())
+        message_id = self._generate_message_id()
+
+        # Create the follow request message
         message = {
             'TYPE': 'FOLLOW',
             'FROM': self.peer_manager.user_id,
             'TO': target_user_id,
-            'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': self._generate_message_id()
+            'MESSAGE_ID': message_id,
+            'TIMESTAMP': str(timestamp)
         }
-        
-        peer_info = self.peer_manager.get_peer_info(target_user_id)
-        if peer_info:
+
+        # Check if target peer exists
+        if target_user_id in self.peer_manager.known_peers:
+            peer_info = self.peer_manager.known_peers[target_user_id]
+            # Use send_to_address instead of broadcast_message
             return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
         return False
     
@@ -945,7 +1019,7 @@ class MessageHandler:
         print(f" {colorize_cell(board[6])} | {colorize_cell(board[7])} | {colorize_cell(board[8])} ")
         print("   |   |   ")
     
-    # File Transfer Methods
+  # File Transfer Methods
     def handle_file_offer(self, msg_dict, addr):
         """Handle FILE_OFFER message"""
         try:
@@ -1274,3 +1348,59 @@ class MessageHandler:
         return self.active_games.get(game_id)
 
     # ==================== HELPER METHODS ====================
+
+    # TTL Implementation
+    def _is_message_valid(self, timestamp, ttl):
+        """Check if a message is still valid based on its timestamp and TTL"""
+        if not timestamp or not ttl:
+            return False
+            
+        try:
+            creation_time = int(timestamp)
+            ttl_seconds = int(ttl)
+            current_time = int(time.time())
+            
+            # Message is valid if: creation_time + ttl_seconds > current_time
+            return (creation_time + ttl_seconds) > current_time
+        except ValueError:
+            # If parsing fails, consider message invalid
+            return False
+        
+    def _store_message(self, message_id, msg_dict):
+        """Store message with TTL-based expiration"""
+        msg_type = msg_dict.get('TYPE', '')
+        timestamp = int(msg_dict.get('TIMESTAMP', time.time()))
+        
+        if msg_type == 'POST':
+            # Only POST messages should use TTL field as per spec
+            ttl = int(msg_dict.get('TTL', DEFAULT_POST_TTL))
+            expiry_time = timestamp + ttl
+        else:
+            # For non-POST messages, don't use TTL field
+            # Either store indefinitely or use a default value for implementation
+            # purposes (not a protocol requirement)
+            expiry_time = float('inf')  # Store indefinitely
+            # Alternative: use a default storage time for memory management
+            # expiry_time = timestamp + DEFAULT_STORAGE_TIME
+        
+        self.message_cache[message_id] = (msg_dict, expiry_time)
+
+    def _ttl_cleanup_loop(self):
+        """Periodically clean up expired messages"""
+        while True:
+            try:
+                time.sleep(TTL_CLEANUP_INTERVAL)  # Check every minute by default
+                
+                current_time = int(time.time())
+                expired_ids = [mid for mid, (_, expiry) in self.message_cache.items() 
+                                if expiry <= current_time]
+                
+                for mid in expired_ids:
+                    del self.message_cache[mid]
+                    
+                if expired_ids and self.verbose_mode:
+                    print(f"\n[TTL] Cleaned up {len(expired_ids)} expired messages")
+                    
+            except Exception as e:
+                if self.verbose_mode:
+                    print(f"\n[ERROR] TTL cleanup error: {e}")

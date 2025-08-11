@@ -25,3 +25,7 @@ AVATAR_MAX_SIZE = 20 * 1024  # 20KB
 
 # File paths
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# TTL settings (in seconds)
+DEFAULT_POST_TTL = 3600   
+TTL_CLEANUP_INTERVAL = 60   

@@ -189,19 +189,36 @@ class UserInterface:
             print("No peers discovered yet. Wait a moment for peer discovery.")
             return
         
+        # Filter out expired peers
+        active_peers = {}
+        for user_id, info in peers.items():
+            # Get timestamp from peer info or use current time as fallback
+            timestamp = info.get('timestamp', str(int(time.time())))
+            # Use default TTL if not specified
+            ttl = info.get('ttl', str(DEFAULT_PROFILE_TTL))
+            
+            # Only include peer if TTL is still valid
+            if self.message_handler._is_message_valid(timestamp, ttl):
+                active_peers[user_id] = info
+        
         if self.message_handler.verbose_mode:
-            peer_list = [f"{user_id} ({info['ip']}:{info['port']})" for user_id, info in peers.items()]
-            print(f"\n[KNOWN PEERS] ({len(peers)} peers):")
+            peer_list = [f"{user_id} ({info['ip']}:{info['port']})" for user_id, info in active_peers.items()]
+            print(f"\n[KNOWN PEERS] ({len(active_peers)} active of {len(peers)} total peers):")
             for peer_info in peer_list:
                 print(f"  - {peer_info}")
         else:
-            print(f"\nOnline ({len(peers)}):")
-            for user_id in peers.keys():
+            print(f"\nOnline ({len(active_peers)} active):")
+            for user_id in active_peers.keys():
                 display_name = self.peer_manager.get_display_name(user_id)
                 avatar_info = self.peer_manager.get_avatar_info(user_id)
                 following_status = " [Following]" if self.peer_manager.is_following(user_id) else ""
                 follower_status = " [Follower]" if self.peer_manager.is_follower(user_id) else ""
                 print(f"  - {display_name} ({user_id}){avatar_info}{following_status}{follower_status}")
+        
+        # Show expired peers count if any exist
+        expired_count = len(peers) - len(active_peers)
+        if expired_count > 0:
+            print(f"\n{expired_count} expired peer profiles not shown")
     
     def _handle_follow_command(self):
         """Handle FOLLOW command to follow a peer"""
@@ -747,3 +764,75 @@ class UserInterface:
         import datetime
         dt = datetime.datetime.fromtimestamp(timestamp)
         return dt.strftime("%Y-%m-%d %H:%M:%S")
+    
+    def display_message_with_ttl(self, msg_dict):
+        """Display a message with TTL information"""
+        import datetime
+        import time
+        
+        message_type = msg_dict.get('TYPE', 'Unknown')
+        user_id = msg_dict.get('USER_ID', msg_dict.get('FROM', 'Unknown'))
+        content = msg_dict.get('CONTENT', '')
+        timestamp = msg_dict.get('TIMESTAMP', '')
+        ttl = msg_dict.get('TTL', '')
+        message_id = msg_dict.get('MESSAGE_ID', '')
+        
+        # Skip expired messages
+        if not self.message_handler._is_message_valid(timestamp, ttl):
+            return False
+        
+        if timestamp and ttl:
+            try:
+                # Calculate expiry time
+                creation_time = int(timestamp)
+                ttl_seconds = int(ttl)
+                expiry_time = creation_time + ttl_seconds
+                current_time = int(time.time())
+                
+                # Format times
+                created_str = datetime.datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
+                expires_str = datetime.datetime.fromtimestamp(expiry_time).strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Calculate time remaining
+                remaining = expiry_time - current_time
+                if remaining > 0:
+                    if remaining < 60:
+                        remaining_str = f"{remaining}s"
+                    elif remaining < 3600:
+                        remaining_str = f"{remaining // 60}m"
+                    elif remaining < 86400:
+                        remaining_str = f"{remaining // 3600}h"
+                    else:
+                        remaining_str = f"{remaining // 86400}d"
+                    
+                    # Display message based on type
+                    if message_type == 'POST':
+                        display_name = self.peer_manager.get_display_name(user_id)
+                        avatar_info = self.peer_manager.get_avatar_info(user_id)
+                        print(f"\n{display_name}{avatar_info} ({message_id}): {content}")
+                        print(f"  ⏱️ Expires in: {remaining_str}")
+                    elif message_type == 'DM':
+                        from_user = user_id
+                        display_name = self.peer_manager.get_display_name(from_user)
+                        avatar_info = self.peer_manager.get_avatar_info(from_user)
+                        print(f"\n[MSG] {display_name}{avatar_info} ({message_id}): {content}")
+                        print(f"  ⏱️ Expires in: {remaining_str}")
+                    else:
+                        print(f"[{message_type}] {user_id}: {content}")
+                        print(f"  ⏱️ Expires in: {remaining_str}")
+                    
+                    return True
+                else:
+                    # This shouldn't happen since we check validity above, but just in case
+                    return False
+                    
+            except (ValueError, TypeError) as e:
+                print(f"[{message_type}] {user_id}: {content}")
+                if self.message_handler.verbose_mode:
+                    print(f"  ⚠️ Invalid TTL format: {e}")
+                return True
+        else:
+            print(f"[{message_type}] {user_id}: {content}")
+            if self.message_handler.verbose_mode:
+                print(f"  ⚠️ Missing TTL information")
+            return True

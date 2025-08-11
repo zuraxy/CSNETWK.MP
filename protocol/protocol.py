@@ -23,7 +23,7 @@ class Protocol(object):
         return {k: v for k, v in pairs}
     
     # Example original message earlier decoded outputs a dictionary. This works by converting the bytes back to a UTF-8 string first, split string by newlines, then for each line containing a colon, split at first colon to create the key-value pairs then build and return a dictionary from those pairs
-    # Output:
+    # Output:   
     # {
     # 'TYPE': 'POST',
     # 'USER_ID': 'john_doe',
