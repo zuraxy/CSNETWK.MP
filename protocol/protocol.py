@@ -5,7 +5,8 @@
 # original message = {
 # "TYPE": "POST",
 # "USER_ID": "john_doe",
-# "CONTENT": "f83d2b1c"
+# "CONTENT": "f83d2b1c",
+# "TOKEN": "john_doe@192.168.1.10|1728941991|broadcast"
 # }
 
 class Protocol(object):
@@ -14,7 +15,7 @@ class Protocol(object):
     # when decoding for every split with \n it further splits each pair using ':' then returns it
 
     # example original message earlier upon being encoded results to:
-    # b'TYPE:POST\nUSER_ID:john_doe\nCONTENT:f83d2b1c\n\n' 
+    # b'TYPE:POST\nUSER_ID:john_doe\nCONTENT:f83d2b1c\nTOKEN:john_doe@192.168.1.10|1728941991|broadcast\n\n' 
     # b'<value>' means byte of <value>
     
     def decode_message(message:bytes)-> dict:

@@ -46,10 +46,39 @@ class MessageHandler:
         
         # Like message handlers
         self.network_manager.register_message_handler('LIKE', self.handle_like_message)
+        
+        # Token revocation handler
+        self.network_manager.register_message_handler('REVOKE', self.handle_token_revocation)
     
     def set_verbose_mode(self, verbose):
         """Set verbose mode for message display"""
         self.verbose_mode = verbose
+    
+    def validate_message_token(self, msg_dict, peer_ip):
+        """
+        Validate token in a message
+        
+        Args:
+            msg_dict (dict): The message dictionary
+            peer_ip (str): The IP address of the sender
+            
+        Returns:
+            tuple: (is_valid, reason) - Validation result and reason if invalid
+        """
+        # Skip token validation for discovery and profile messages
+        message_type = msg_dict.get('TYPE')
+        if message_type in ['PEER_DISCOVERY', 'PEER_LIST_REQUEST', 'PEER_LIST_RESPONSE']:
+            return True, None
+            
+        token = msg_dict.get('TOKEN')
+        if not token:
+            return False, "Missing token"
+            
+        # Get required scope for this message type
+        required_scope = self.peer_manager.get_scope_for_message_type(message_type)
+        
+        # Validate token
+        return self.peer_manager.validate_token(token, required_scope, peer_ip)
     
     def handle_peer_discovery(self, msg_dict, addr):
         """Handle peer discovery messages"""
@@ -107,6 +136,13 @@ class MessageHandler:
         message_id = msg_dict.get('MESSAGE_ID', '')
         token = msg_dict.get('TOKEN', '')
         
+        # Validate token
+        is_valid, reason = self.validate_message_token(msg_dict, addr[0])
+        if not is_valid:
+            if self.verbose_mode:
+                print(f"\n[REJECTED] POST from {user_id} - Invalid token: {reason}")
+            return
+        
         # Only process messages from users you follow
         if not self.peer_manager.is_following(user_id):
             if self.verbose_mode:
@@ -158,6 +194,13 @@ class MessageHandler:
         msg_type = msg_dict.get('TYPE', 'DM')
         message_id = msg_dict.get('MESSAGE_ID', '')
         token = msg_dict.get('TOKEN', '')
+        
+        # Validate token
+        is_valid, reason = self.validate_message_token(msg_dict, addr[0])
+        if not is_valid:
+            if self.verbose_mode:
+                print(f"\n[REJECTED] DM from {from_user} - Invalid token: {reason}")
+            return
 
         # Store the direct message regardless of whether it's for us
         # (we track messages we receive and messages sent to others)
@@ -236,6 +279,10 @@ class MessageHandler:
             ttl (int): Time To Live in seconds. Default is 3600 (1 hour)
         """
         timestamp = str(int(time.time()))
+        
+        # Create a token with broadcast scope
+        token = self._generate_token("broadcast")
+        
         message = {
             'TYPE': 'POST',
             'USER_ID': self.peer_manager.user_id,
@@ -243,7 +290,7 @@ class MessageHandler:
             'TIMESTAMP': timestamp,
             'TTL': str(ttl),
             'MESSAGE_ID': self._generate_message_id(),
-            'TOKEN': self._generate_token()
+            'TOKEN': token
         }
         
         # Track this post in the peer manager
@@ -274,13 +321,18 @@ class MessageHandler:
             return False
         
         timestamp = int(time.time())
+        
+        # Create a token with chat scope
+        token = self._generate_token("chat")
+        
         message = {
             'TYPE': 'DM',
             'FROM': self.peer_manager.user_id,
             'TO': recipient,
             'CONTENT': content,
             'TIMESTAMP': str(timestamp),
-            'MESSAGE_ID': self._generate_message_id()
+            'MESSAGE_ID': self._generate_message_id(),
+            'TOKEN': token
         }
         
         # Store the outgoing message
@@ -321,12 +373,16 @@ class MessageHandler:
         if not self.peer_manager.is_peer_known(target_user_id):
             return False
         
+        # Create token with follow scope
+        token = self.peer_manager.create_token("follow")
+        
         message = {
             'TYPE': 'FOLLOW',
             'FROM': self.peer_manager.user_id,
             'TO': target_user_id,
             'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': self._generate_message_id()
+            'MESSAGE_ID': self._generate_message_id(),
+            'TOKEN': token
         }
         
         peer_info = self.peer_manager.get_peer_info(target_user_id)
@@ -512,6 +568,9 @@ class MessageHandler:
         # Generate timestamp
         timestamp = int(time.time())
         
+        # Create a token with group scope
+        token = self._generate_token("group")
+        
         # Prepare message
         message = {
             'TYPE': 'GROUP_MESSAGE',
@@ -519,7 +578,8 @@ class MessageHandler:
             'GROUP_ID': group_id,
             'CONTENT': content,
             'TIMESTAMP': str(timestamp),
-            'MESSAGE_ID': self._generate_message_id()
+            'MESSAGE_ID': self._generate_message_id(),
+            'TOKEN': token
         }
         
         # Store the message locally
@@ -704,9 +764,21 @@ class MessageHandler:
         print(f"===== End of Messages ({len(messages)} total) =====")
         return True, f"Found {len(messages)} messages in group {group_id}"
         
-    def _generate_token(self):
-        """Generate a security token for messages"""
-        return secrets.token_hex(8)
+    def _generate_token(self, scope=None):
+        """
+        Generate a security token for messages
+        
+        Args:
+            scope (str, optional): The scope of the token. If None, will determine based on context.
+            
+        Returns:
+            str: Formatted token string
+        """
+        if scope is None:
+            # This is a fallback only - specific methods should specify the scope
+            scope = "broadcast"
+        
+        return self.peer_manager.create_token(scope)
 
     def handle_follow_request(self, msg_dict, addr):
         """Handle follow request from another peer"""
@@ -717,6 +789,14 @@ class MessageHandler:
         timestamp = msg_dict.get('TIMESTAMP', None)
         msg_type = msg_dict.get('TYPE', 'FOLLOW')
         message_id = msg_dict.get('MESSAGE_ID', '')
+        token = msg_dict.get('TOKEN', '')
+        
+        # Validate token
+        is_valid, reason = self.validate_message_token(msg_dict, addr[0])
+        if not is_valid:
+            if self.verbose_mode:
+                print(f"\n[REJECTED] FOLLOW from {from_user} - Invalid token: {reason}")
+            return
 
         # Only process if this message is for us
         if to_user == self.peer_manager.user_id:
@@ -1016,6 +1096,15 @@ class MessageHandler:
         group_id = msg_dict.get('GROUP_ID', '')
         content = msg_dict.get('CONTENT', '')
         timestamp = msg_dict.get('TIMESTAMP', int(time.time()))
+        token = msg_dict.get('TOKEN', '')
+        
+        # Validate token - local messages (from self) skip validation
+        if addr[0] != '127.0.0.1':
+            is_valid, reason = self.validate_message_token(msg_dict, addr[0])
+            if not is_valid:
+                if self.verbose_mode:
+                    print(f"\n[REJECTED] GROUP_MESSAGE from {from_user} - Invalid token: {reason}")
+                return
         
         # Verify this is a valid group and we're a member
         if not self.peer_manager.is_in_group(group_id):
@@ -1195,3 +1284,55 @@ class MessageHandler:
             display_name = self.peer_manager.get_display_name(from_user)
             avatar_info = self.peer_manager.get_avatar_info(from_user)
             print(f"\n[{group['name']}] {display_name}{avatar_info}: {content}")
+            
+    def handle_token_revocation(self, msg_dict, addr):
+        """
+        Handle token revocation message
+        
+        Args:
+            msg_dict (dict): The message dictionary
+            addr (tuple): Sender address (ip, port)
+            
+        Returns:
+            bool: True if token was successfully revoked
+        """
+        token = msg_dict.get('TOKEN')
+        if not token:
+            return False
+            
+        # Log the revocation if in verbose mode
+        if self.verbose_mode:
+            print(f"\nTYPE: REVOKE")
+            print(f"TOKEN: {token}")
+            
+        # Revoke the token
+        return self.peer_manager.revoke_token(token)
+    
+    def send_token_revocation(self, token, target_user_id=None):
+        """
+        Send token revocation message
+        
+        Args:
+            token (str): The token to revoke
+            target_user_id (str, optional): If specified, send only to this user
+            
+        Returns:
+            bool: True if message was sent successfully
+        """
+        message = {
+            'TYPE': 'REVOKE',
+            'USER_ID': self.peer_manager.user_id,
+            'TOKEN': token,
+            'TIMESTAMP': str(int(time.time())),
+            'MESSAGE_ID': secrets.token_hex(8)
+        }
+        
+        # If target user specified, send only to them
+        if target_user_id:
+            peer_info = self.peer_manager.get_peer_info(target_user_id)
+            if peer_info:
+                return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+            return False
+            
+        # Otherwise broadcast to all known peers
+        return self.network_manager.broadcast_to_peers(message)

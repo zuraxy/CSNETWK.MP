@@ -6,7 +6,8 @@ Handles peer discovery, tracking, and management
 import time
 import threading
 import secrets
-from peer.config.settings import DISCOVERY_INTERVAL, PEER_TIMEOUT
+from peer.config.settings import DISCOVERY_INTERVAL, PEER_TIMEOUT, TOKEN_CLEANUP_INTERVAL
+from peer.security.token_manager import TokenManager
 
 class PeerManager:
     """Manages peer discovery, tracking, and cleanup"""
@@ -37,6 +38,9 @@ class PeerManager:
         self.my_posts = {}  # timestamp -> {'content': str, 'ttl': int, 'created_at': int}
         self.received_posts = {}  # user_id -> {timestamp -> {'content': str, 'ttl': int, 'created_at': int}}
         
+        # Token management
+        self.token_manager = TokenManager()
+        
         # Discovery state
         self.user_id = ""
         self.network_manager = None
@@ -46,6 +50,9 @@ class PeerManager:
         # Callbacks for events
         self.on_peer_discovered = None
         self.on_peer_lost = None
+        
+        # Token cleanup thread
+        self.token_cleanup_thread = None
     
     def set_network_manager(self, network_manager):
         """Set the network manager for sending discovery messages"""
@@ -631,6 +638,102 @@ class PeerManager:
             
         # Check if post is expired
         current_time = int(time.time())
+        
+        created_at = post['created_at']
+        ttl = post['ttl']
+        
+        if created_at + ttl <= current_time:
+            return ""  # Post is expired
+            
+        return post['content']
+    
+    # Token management methods
+    def create_token(self, scope):
+        """
+        Create a new token with the specified scope
+        
+        Args:
+            scope (str): The scope of the token (chat, broadcast, follow, etc.)
+            
+        Returns:
+            str: The generated token
+        """
+        return self.token_manager.create_token(self.user_id, scope)
+    
+    def validate_token(self, token, required_scope=None, peer_ip=None):
+        """
+        Validate a token
+        
+        Args:
+            token (str): The token to validate
+            required_scope (str, optional): The required scope for the operation
+            peer_ip (str, optional): The IP address of the peer for additional validation
+            
+        Returns:
+            tuple: (is_valid, reason) - Validation result and reason if invalid
+        """
+        return self.token_manager.validate_token(token, required_scope, peer_ip)
+    
+    def revoke_token(self, token):
+        """
+        Revoke a token
+        
+        Args:
+            token (str): The token to revoke
+            
+        Returns:
+            bool: True if token was successfully revoked
+        """
+        return self.token_manager.revoke_token(token)
+    
+    def revoke_all_tokens(self):
+        """
+        Revoke all tokens for the current user
+        
+        Returns:
+            bool: True if tokens were successfully revoked
+        """
+        return self.token_manager.revoke_all_user_tokens(self.user_id)
+    
+    def get_scope_for_message_type(self, message_type):
+        """
+        Get the required scope for a message type
+        
+        Args:
+            message_type (str): The message type
+            
+        Returns:
+            str: The required scope, or None if no specific scope is required
+        """
+        return self.token_manager.get_required_scope_for_message_type(message_type)
+    
+    def start_token_cleanup(self):
+        """
+        Start periodic token cleanup
+        """
+        self.token_cleanup_thread = threading.Thread(target=self._token_cleanup_loop)
+        self.token_cleanup_thread.daemon = True
+        self.token_cleanup_thread.start()
+    
+    def stop_token_cleanup(self):
+        """
+        Stop token cleanup
+        """
+        if self.token_cleanup_thread:
+            self.token_cleanup_thread.join(timeout=1)
+    
+    def _token_cleanup_loop(self):
+        """
+        Periodic token cleanup loop
+        """
+        while self.running:
+            time.sleep(TOKEN_CLEANUP_INTERVAL)
+            if self.running:
+                self.token_manager.cleanup_revoked_tokens()
+    
+    def _generate_message_id(self):
+        """Generate a unique message ID"""
+        return secrets.token_hex(8)
         created_at = post['created_at']
         ttl = post['ttl']
         
