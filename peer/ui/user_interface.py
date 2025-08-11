@@ -101,11 +101,23 @@ class UserInterface:
         if not message:
             print("No message provided")
             return
+            
+        # Get TTL (Time To Live)
+        ttl_input = input("Time To Live in seconds (default 3600 = 1 hour): ").strip()
+        try:
+            ttl = int(ttl_input) if ttl_input else 3600
+            if ttl <= 0:
+                print("TTL must be positive, using default 3600 seconds")
+                ttl = 3600
+        except ValueError:
+            print("Invalid TTL value, using default 3600 seconds")
+            ttl = 3600
         
-        sent_count = self.message_handler.send_post_message(message)
+        # Send the post with TTL
+        sent_count = self.message_handler.send_post_message(message, ttl)
         
         if self.message_handler.verbose_mode:
-            print(f"Message broadcasted to {sent_count} followers")
+            print(f"Message broadcasted to {sent_count} followers with TTL of {ttl} seconds")
     
     def _handle_dm_command(self):
         """Handle DM (direct message) command"""
@@ -772,9 +784,10 @@ class UserInterface:
     def _show_my_posts(self):
         """Show posts created by the user"""
         import datetime
+        import time
         
         # Get posts from the peer manager
-        all_posts = self.peer_manager.my_posts
+        all_posts = self.peer_manager.get_user_posts(self.peer_manager.user_id)
         
         if not all_posts:
             print("You haven't posted anything yet.")
@@ -784,12 +797,26 @@ class UserInterface:
         sorted_posts = sorted(all_posts.items(), key=lambda x: x[0], reverse=True)
         
         print("\n=== Your Posts ===")
-        for idx, (timestamp, content) in enumerate(sorted_posts, 1):
-            # Format timestamp
+        for idx, (timestamp, post_data) in enumerate(sorted_posts, 1):
+            # Extract post data
+            content = post_data['content']
+            ttl = post_data['ttl']
+            created_at = post_data['created_at']
+            
+            # Format timestamps
             try:
-                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                ts_str = datetime.datetime.fromtimestamp(created_at).strftime('%Y-%m-%d %H:%M:%S')
+                # Calculate expiration time
+                expires_at = created_at + ttl
+                expires_str = datetime.datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S')
+                # Calculate remaining time
+                current_time = int(time.time())
+                remaining_seconds = max(0, expires_at - current_time)
+                remaining_str = self._format_time_remaining(remaining_seconds)
             except Exception:
                 ts_str = str(timestamp)
+                expires_str = "Unknown"
+                remaining_str = "Unknown"
                 
             # Get like count
             like_count = self.peer_manager.get_post_likes_count(timestamp)
@@ -797,6 +824,7 @@ class UserInterface:
             
             # Display post with index
             print(f"{idx}. [{ts_str}] {content} - {likes_label}")
+            print(f"   Expires: {expires_str} ({remaining_str} remaining)")
             
         print("\nTo view who liked a post, use LIKE command option 3.")
     
@@ -849,6 +877,7 @@ class UserInterface:
     def _show_following_posts(self):
         """Show posts from users you follow"""
         import datetime
+        import time
         
         # Get list of users you follow
         following = self.peer_manager.following
@@ -861,8 +890,8 @@ class UserInterface:
         all_posts = []
         for user_id in following:
             posts = self.peer_manager.get_user_posts(user_id)
-            for timestamp, content in posts.items():
-                all_posts.append((user_id, timestamp, content))
+            for timestamp, post_data in posts.items():
+                all_posts.append((user_id, timestamp, post_data))
                 
         if not all_posts:
             print("No posts from users you follow.")
@@ -873,12 +902,26 @@ class UserInterface:
         
         # Display posts
         print("\n=== Posts from Users You Follow ===")
-        for idx, (user_id, timestamp, content) in enumerate(sorted_posts, 1):
-            # Format timestamp
+        for idx, (user_id, timestamp, post_data) in enumerate(sorted_posts, 1):
+            # Extract post data
+            content = post_data['content']
+            ttl = post_data['ttl']
+            created_at = post_data['created_at']
+            
+            # Format timestamps
             try:
-                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                ts_str = datetime.datetime.fromtimestamp(created_at).strftime('%Y-%m-%d %H:%M:%S')
+                # Calculate expiration time
+                expires_at = created_at + ttl
+                expires_str = datetime.datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S')
+                # Calculate remaining time
+                current_time = int(time.time())
+                remaining_seconds = max(0, expires_at - current_time)
+                remaining_str = self._format_time_remaining(remaining_seconds)
             except Exception:
                 ts_str = str(timestamp)
+                expires_str = "Unknown"
+                remaining_str = "Unknown"
                 
             # Get display name
             display_name = self.peer_manager.get_display_name(user_id) or user_id
@@ -892,6 +935,7 @@ class UserInterface:
             
             # Display post with index
             print(f"{idx}. [{ts_str}] {display_name}: {content} - {likes_label}{liked_status}")
+            print(f"   Expires: {expires_str} ({remaining_str} remaining)")
     
     def _handle_like_command(self):
         """Handle liking/unliking posts"""
@@ -955,12 +999,27 @@ class UserInterface:
             
             # Display posts with formatting
             print(f"\n=== Posts from {selected_user_id} ===")
-            for idx, (timestamp, content) in enumerate(sorted_posts, 1):
+            for idx, (timestamp, post_data) in enumerate(sorted_posts, 1):
+                # Extract post data
+                content = post_data['content']
+                ttl = post_data['ttl']
+                created_at = post_data['created_at']
+                
                 # Format timestamp for display
+                import time
                 try:
-                    ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    ts_str = datetime.datetime.fromtimestamp(created_at).strftime('%Y-%m-%d %H:%M:%S')
+                    # Calculate expiration time
+                    expires_at = created_at + ttl
+                    expires_str = datetime.datetime.fromtimestamp(expires_at).strftime('%Y-%m-%d %H:%M:%S')
+                    # Calculate remaining time
+                    current_time = int(time.time())
+                    remaining_seconds = max(0, expires_at - current_time)
+                    remaining_str = self._format_time_remaining(remaining_seconds)
                 except Exception:
                     ts_str = timestamp
+                    expires_str = "Unknown"
+                    remaining_str = "Unknown"
                 
                 # Truncate long content
                 truncated = content[:50] + ("..." if len(content) > 50 else "")
@@ -970,6 +1029,7 @@ class UserInterface:
                 like_status = " (Already Liked ❤️)" if already_liked else ""
                 
                 print(f"{idx}. [{ts_str}] {truncated}{like_status}  (ID: {timestamp})")
+                print(f"   Expires: {expires_str} ({remaining_str} remaining)")
                 
             # Get post selection
             post_idx = int(input("\nSelect post to like (0 to cancel): ").strip())
@@ -981,7 +1041,7 @@ class UserInterface:
                 return
                 
             selected_timestamp = sorted_posts[post_idx - 1][0]
-            selected_content = sorted_posts[post_idx - 1][1]
+            selected_content = sorted_posts[post_idx - 1][1]['content']
             
             # Check if already liked
             if self.peer_manager.has_liked_post(selected_user_id, selected_timestamp):
@@ -1110,3 +1170,26 @@ class UserInterface:
                 
         except ValueError:
             print("Please enter a valid number")
+            
+    def _format_time_remaining(self, seconds):
+        """Format seconds into a human-readable time string
+        
+        Args:
+            seconds (int): Seconds to format
+            
+        Returns:
+            str: Formatted time string
+        """
+        if seconds < 60:
+            return f"{seconds} seconds"
+        elif seconds < 3600:
+            minutes = seconds // 60
+            return f"{minutes} minute{'s' if minutes != 1 else ''}"
+        elif seconds < 86400:
+            hours = seconds // 3600
+            minutes = (seconds % 3600) // 60
+            return f"{hours} hour{'s' if hours != 1 else ''}, {minutes} minute{'s' if minutes != 1 else ''}"
+        else:
+            days = seconds // 86400
+            hours = (seconds % 86400) // 3600
+            return f"{days} day{'s' if days != 1 else ''}, {hours} hour{'s' if hours != 1 else ''}"

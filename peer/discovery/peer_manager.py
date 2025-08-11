@@ -30,8 +30,8 @@ class PeerManager:
         # Post likes functionality
         self.liked_posts = set()  # Set of post_timestamps I've liked
         self.post_likes = {}  # post_timestamp -> set(user_ids who liked it)
-        self.my_posts = {}  # timestamp -> content (posts I've created)
-        self.received_posts = {}  # user_id -> {timestamp -> content} (posts from other users)
+        self.my_posts = {}  # timestamp -> {'content': str, 'ttl': int, 'created_at': int}
+        self.received_posts = {}  # user_id -> {timestamp -> {'content': str, 'ttl': int, 'created_at': int}}
         
         # Discovery state
         self.user_id = ""
@@ -411,24 +411,87 @@ class PeerManager:
         return secrets.token_hex(8)
         
     # Post likes management
-    def add_post(self, timestamp, content):
-        """Track a post created by the user"""
-        self.my_posts[timestamp] = content
+    def add_post(self, timestamp, content, ttl=3600):
+        """Track a post created by the user
+        
+        Args:
+            timestamp (str): The timestamp when the post was created
+            content (str): The content of the post
+            ttl (int): Time To Live in seconds
+            
+        Returns:
+            bool: True if post was added successfully
+        """
+        created_at = int(timestamp)
+        self.my_posts[timestamp] = {
+            'content': content,
+            'ttl': int(ttl),
+            'created_at': created_at
+        }
         return True
         
-    def add_received_post(self, user_id, timestamp, content):
-        """Track a post received from another user"""
+    def add_received_post(self, user_id, timestamp, content, ttl=3600):
+        """Track a post received from another user
+        
+        Args:
+            user_id (str): The ID of the user who sent the post
+            timestamp (str): The timestamp when the post was created
+            content (str): The content of the post
+            ttl (int): Time To Live in seconds
+            
+        Returns:
+            bool: True if post was added successfully
+        """
         if user_id not in self.received_posts:
             self.received_posts[user_id] = {}
-        self.received_posts[user_id][timestamp] = content
+            
+        created_at = int(timestamp)
+        self.received_posts[user_id][timestamp] = {
+            'content': content,
+            'ttl': int(ttl),
+            'created_at': created_at
+        }
         return True
         
     def get_user_posts(self, user_id):
-        """Get posts from a specific user"""
+        """Get posts from a specific user, filtering out expired posts
+        
+        Args:
+            user_id (str): The ID of the user whose posts to get
+            
+        Returns:
+            dict: Dictionary of timestamp -> post data
+        """
+        # Get current time
+        current_time = int(time.time())
+        
         if user_id == self.user_id:
-            return self.my_posts
+            # Filter out expired posts
+            valid_posts = {}
+            for timestamp, post_data in self.my_posts.items():
+                created_at = post_data['created_at']
+                ttl = post_data['ttl']
+                
+                # Check if post is still valid
+                if created_at + ttl > current_time:
+                    valid_posts[timestamp] = post_data
+                    
+            return valid_posts
         else:
-            return self.received_posts.get(user_id, {})
+            if user_id not in self.received_posts:
+                return {}
+                
+            # Filter out expired posts
+            valid_posts = {}
+            for timestamp, post_data in self.received_posts[user_id].items():
+                created_at = post_data['created_at']
+                ttl = post_data['ttl']
+                
+                # Check if post is still valid
+                if created_at + ttl > current_time:
+                    valid_posts[timestamp] = post_data
+                    
+            return valid_posts
         
     def like_post(self, post_author, post_timestamp):
         """Like a post"""
@@ -470,5 +533,25 @@ class PeerManager:
         return len(self.post_likes.get(post_timestamp, set()))
         
     def get_post_content(self, post_timestamp):
-        """Get the content of a post"""
-        return self.my_posts.get(post_timestamp, "")
+        """Get the content of a post
+        
+        Args:
+            post_timestamp (str): The timestamp of the post
+            
+        Returns:
+            str: The content of the post, or empty string if not found or expired
+        """
+        # Check if post exists
+        post = self.my_posts.get(post_timestamp)
+        if not post:
+            return ""
+            
+        # Check if post is expired
+        current_time = int(time.time())
+        created_at = post['created_at']
+        ttl = post['ttl']
+        
+        if created_at + ttl <= current_time:
+            return ""  # Post expired
+            
+        return post['content']

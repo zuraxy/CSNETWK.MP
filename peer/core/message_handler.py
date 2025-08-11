@@ -113,9 +113,15 @@ class MessageHandler:
                 print(f"\n[FILTERED] POST from {user_id} ignored - not following this user")
             return
             
+        # Get TTL or use default (3600 seconds = 1 hour)
+        try:
+            ttl_seconds = int(ttl) if ttl else 3600
+        except ValueError:
+            ttl_seconds = 3600
+            
         # Track this post so we can like it later
         if timestamp:
-            self.peer_manager.add_received_post(user_id, timestamp, content)
+            self.peer_manager.add_received_post(user_id, timestamp, content, ttl_seconds)
 
         if self.verbose_mode:
             # Format timestamp
@@ -210,19 +216,26 @@ class MessageHandler:
         except:
             print("\n[ERROR] Could not parse peer list")
     
-    def send_post_message(self, content):
-        """Send a broadcast POST message to followers only"""
+    def send_post_message(self, content, ttl=3600):
+        """Send a broadcast POST message to followers only
+        
+        Args:
+            content (str): The content of the post
+            ttl (int): Time To Live in seconds. Default is 3600 (1 hour)
+        """
         timestamp = str(int(time.time()))
         message = {
             'TYPE': 'POST',
             'USER_ID': self.peer_manager.user_id,
             'CONTENT': content,
             'TIMESTAMP': timestamp,
-            'MESSAGE_ID': self._generate_message_id()
+            'TTL': str(ttl),
+            'MESSAGE_ID': self._generate_message_id(),
+            'TOKEN': self._generate_token()
         }
         
         # Track this post in the peer manager
-        self.peer_manager.add_post(timestamp, content)
+        self.peer_manager.add_post(timestamp, content, ttl)
         
         # Get only peers who follow you
         followers = self.peer_manager.get_followers()
