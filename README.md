@@ -7,7 +7,6 @@
 ## 🚨 IMPORTANT: This is a P2P System!
 - **USE**: `python run_peer.py` for peer-to-peer communication
 - 🔗 **No server needed**: Peers communicate directly with each other
-- 🗑️ **Cleaned up**: Removed all legacy monolithic and client-server implementations
 
 ## Quick Start
 
@@ -27,32 +26,14 @@ python run_peer.py
 
 This implementation uses a **clean modular architecture** with separated concerns:
 
-### Modular Implementation (`run_peer.py`) ⭐ **Production Ready**
-- **Separated concerns**: 4 specialized modules  
-- **Maintainable**: Easy to test, debug, and extend
+### Modular Implementation (`run_peer.py`) 
+- **Separated concerns**
+- **Maintainable**: Easy to test and debug
 - **Production-ready**: Clean architecture patterns
 - **No central server** required
 - **Direct peer communication** 
 - **Automatic peer discovery** via UDP broadcast
-- **Self-healing network** with timeout handling
-
-### Modular Architecture Overview
-```
-UDPPeerModular
-├── NetworkManager     # UDP sockets, broadcasting, communication
-├── PeerManager        # Peer discovery, tracking, profiles  
-├── MessageHandler     # Message processing, routing, sending
-└── UserInterface      # Commands, input handling, display
-```
-
-### Discovery System Architecture
-```
-DiscoveryManager
-├── ConnectivityTester # Network connectivity testing
-├── NetworkScanner     # Peer discovery and scanning
-└── CLI Interface      # Rich command-line options
-```
-
+  
 ## Features
 
 ### Core Commands
@@ -62,10 +43,7 @@ DiscoveryManager
 - **PROFILE**: Share profile (with optional avatar) with all peers
 - **LIST**: Show all discovered peers on the network
 - **FOLLOW/UNFOLLOW**: Follow or unfollow specific peers
-- **FOLLOWING/FOLLOWERS**: View your following/followers lists
 - **GROUP**: Create and manage group chats
-- **GROUPVIEW**: View all your groups, members, and messages
-- **FEED**: View your posts and liked posts
 - **LIKE**: Like, unlike, and view likes on posts
 - **VERBOSE**: Toggle between technical and user-friendly display
 - **GAME**: Play Tic Tac Toe
@@ -76,34 +54,10 @@ DiscoveryManager
 - 🔍 **Automatic Peer Discovery**: Peers find each other via UDP broadcast
 - 💬 **Direct Communication**: No relay through central server
 - 📷 **Avatar Support**: Profile pictures in base64 encoding
-- 👥 **Group Chat**: Create groups, send messages to multiple peers simultaneously, and view detailed group overviews
-- 👍 **Social Interactions**: Like/unlike posts and track engagement
-- 🎮 **Games**: Built-in Rock Paper Scissors game with history tracking and leaderboard
+- 👥 **Group Chat**: Create groups, send messages to multiple peers simultaneously
+- 👍 **Social Interactions**: Like/unlike posts
+- 🎮 **Games**: Built-in Tic Tac Toe game 
 - 🎛️ **Verbose/Clean Modes**: Technical details or user-friendly display
-- 🌐 **Network Resilience**: Self-healing peer topology
-
-## How It Works
-
-### Peer Discovery
-1. Each peer broadcasts presence announcements every 30 seconds
-2. Peers respond to discovery messages from other peers
-3. Each peer maintains a local list of discovered peers
-4. Inactive peers are automatically removed after 5 minutes
-
-### Message Flow
-```
-Peer A ────[broadcast]────► All Discovered Peers
-Peer A ────[direct msg]───► Specific Peer B
-```
-
-### Network Topology
-```
-    Peer A ────── Peer B
-      │ ╲       ╱  │
-      │   ╲   ╱    │  
-      │     ╲╱     │
-    Peer D ────── Peer C
-```
 
 ### AI Disclosure
 - AI tools such as ChatGPT and CoPilot were used during the development of this project to assist in understanding protocol requirements and generating portions of the codebase. All AI-generated content, including code and explanations, was reviewed, tested, and verified by the student to ensure correctness, compliance with project specifications, and adherence to academic integrity.
