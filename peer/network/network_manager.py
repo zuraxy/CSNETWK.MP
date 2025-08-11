@@ -130,6 +130,8 @@ class NetworkManager:
             msg_dict = Protocol.decode_message(data)
             msg_type = msg_dict.get('TYPE', '')
             
+            # Skip token validation for discovery and profile related messages
+            # Token validation will be done at the message handler level
             # Debug: Show all incoming messages
             if msg_type.startswith('FILE_'):
                 print(f"Debug: Received {msg_type} message from {addr}")

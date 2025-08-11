@@ -23,5 +23,10 @@ DEFAULT_SCAN_TIMEOUT = 5  # Seconds
 # Profile settings
 AVATAR_MAX_SIZE = 20 * 1024  # 20KB
 
+# Security settings
+TOKEN_TTL = 3600               # Default token time-to-live in seconds (1 hour)
+TOKEN_CLEANUP_INTERVAL = 3600  # Interval to clean up expired token revocations (1 hour)
+TOKEN_MAX_AGE = 86400          # Maximum age of token revocations to keep (24 hours)
+
 # File paths
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

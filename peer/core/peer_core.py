@@ -5,6 +5,8 @@ Modular P2P peer using separated concerns and clean architecture
 """
 import sys
 import os
+import time
+import secrets
 
 # Add parent directory to path for protocol access
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -63,6 +65,28 @@ class UDPPeerModular:
             print(f"Peer started as {user_id}")
             print(f"Listening on {network_info['local_ip']}:{network_info['local_port']}")
             
+            # Start token cleanup thread
+            self.peer_manager.start_token_cleanup()
+            
+            # Start the network manager for message receiving
+            self.network_manager.start_listening()
+            
+            # Start peer discovery
+            self.peer_manager.start_discovery()
+            
+            # Start the user interface
+            self.user_interface.start_command_loop()
+            
+            # Clean shutdown
+            self._shutdown()
+        except KeyboardInterrupt:
+            print("\nInterrupted. Shutting down...")
+            self._shutdown()
+        except Exception as e:
+            print(f"Error in peer operation: {e}")
+            self._shutdown()
+            print(f"Listening on {network_info['local_ip']}:{network_info['local_port']}")
+            
             # Start network listening
             self.network_manager.start_listening()
             
@@ -79,12 +103,19 @@ class UDPPeerModular:
         finally:
             self.shutdown()
     
-    def shutdown(self):
+    def _shutdown(self):
         """Clean shutdown of all components"""
         print("Shutting down peer...")
         
-        # Stop UI
-        self.user_interface.stop()
+        # Revoke all tokens for this user
+        print("Revoking all tokens...")
+        self.peer_manager.revoke_all_tokens()
+        
+        # Broadcast token revocation
+        self._broadcast_token_revocation()
+        
+        # Stop token cleanup
+        self.peer_manager.stop_token_cleanup()
         
         # Stop discovery
         self.peer_manager.stop_discovery()
@@ -93,6 +124,21 @@ class UDPPeerModular:
         self.network_manager.stop_listening()
         
         print("Peer shutdown complete")
+    
+    def _broadcast_token_revocation(self):
+        """Broadcast token revocation to all peers"""
+        # Create revocation message
+        message = {
+            'TYPE': 'REVOKE',
+            'USER_ID': self.peer_manager.user_id,
+            'TIMESTAMP': str(int(time.time())),
+            'MESSAGE_ID': secrets.token_hex(8)
+        }
+        
+        # Send to all peers
+        peers = self.peer_manager.get_all_peers()
+        sent_count = self.network_manager.broadcast_to_peers(message, peers)
+        print(f"Sent token revocation to {sent_count} peers")
     
     def _on_peer_discovered(self, user_id):
         """Callback when a new peer is discovered"""
