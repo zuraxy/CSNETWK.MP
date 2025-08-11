@@ -25,13 +25,13 @@ class UserInterface:
     def start_command_loop(self):
         """Start the main command processing loop"""
         print(f"\nPeer-to-Peer Chat Ready!")
-        print(f"Commands: POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, FILE, VERBOSE, QUIT")
+        print(f"Commands: POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, LIKE, UNLIKE, GAME, FILE, VERBOSE, QUIT")
         print(f"Verbose mode: {'ON' if self.message_handler.verbose_mode else 'OFF'}")
         
         self.running = True
         while self.running:
             try:
-                original_cmd = input("\nCommand (POST/DM/PROFILE/LIST/FOLLOW/UNFOLLOW/FOLLOWING/FOLLOWERS/GAME/FILE/VERBOSE/QUIT): ").strip()
+                original_cmd = input("\nCommand (POST/DM/PROFILE/LIST/FOLLOW/UNFOLLOW/FOLLOWING/FOLLOWERS/LIKE/UNLIKE/GAME/FILE/VERBOSE/QUIT): ").strip()
                 cmd = original_cmd.upper()
                 
                 if cmd == "QUIT" or cmd == "Q":
@@ -55,6 +55,10 @@ class UserInterface:
                     self._handle_following_command()
                 elif cmd == "FOLLOWERS":
                     self._handle_followers_command()
+                elif cmd.startswith("LIKE") and not cmd.startswith("UNLIKE"):
+                    self._handle_like_command(original_cmd, 'LIKE')
+                elif cmd.startswith("UNLIKE") or cmd == "UL":
+                    self._handle_like_command(original_cmd, 'UNLIKE')
                 elif cmd.startswith("GAME") or cmd == "G":
                     self._handle_game_command(original_cmd)
                 elif cmd.startswith("FILE") or cmd == "FILE":
@@ -63,7 +67,7 @@ class UserInterface:
                     # Empty command, just continue
                     continue
                 else:
-                    print("Invalid command. Use POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, FILE, VERBOSE, or QUIT")
+                    print("Invalid command. Use POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, LIKE, UNLIKE, GAME, FILE, VERBOSE, or QUIT")
                     print("You can also use single letters: P, D, L, F, UF, G, V, Q")
                     
             except KeyboardInterrupt:
@@ -836,3 +840,34 @@ class UserInterface:
             if self.message_handler.verbose_mode:
                 print(f"  ⚠️ Missing TTL information")
             return True
+
+    # Like Method
+    def _handle_like_command(self, full_cmd, action):
+        """Handle LIKE/UNLIKE command"""
+        cmd_parts = full_cmd.split(None, 2)
+        
+        if len(cmd_parts) < 3:
+            print(f"Usage: {action} <user@ip> <post_timestamp>")
+            return
+        
+        target_user = cmd_parts[1]
+        post_timestamp = cmd_parts[2]
+        
+        # Check if peer exists
+        if not self.peer_manager.is_peer_known(target_user):
+            print(f"Error: Peer {target_user} not found")
+            print("Use LIST to see available peers")
+            return
+        
+        # Send like/unlike message
+        if self.message_handler.send_like_message(target_user, post_timestamp, action):
+            display_name = self.peer_manager.get_display_name(target_user)
+            if action == 'LIKE':
+                print(f"You liked {display_name}'s post")
+            else:
+                print(f"You unliked {display_name}'s post")
+        else:
+            if action == 'LIKE':
+                print(f"Error: Could not like post (already liked or post expired)")
+            else:
+                print(f"Error: Could not unlike post (not previously liked or post expired)")

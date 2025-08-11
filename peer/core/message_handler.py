@@ -42,6 +42,9 @@ class MessageHandler:
         
         # Add message cache with TTL support
         self.message_cache = {}  # message_id -> (message_dict, expiry_time)
+
+        # Add post likes storage
+        self.post_likes = {}  # post_timestamp -> {user_id: True}
         
         # Start TTL cleanup thread
         self.ttl_cleanup_thread = threading.Thread(target=self._ttl_cleanup_loop)
@@ -62,6 +65,9 @@ class MessageHandler:
         self.network_manager.register_message_handler('UNFOLLOW', self.handle_unfollow_request)
         self.network_manager.register_message_handler('FOLLOW_RESPONSE', self.handle_follow_response)
         self.network_manager.register_message_handler('UNFOLLOW_RESPONSE', self.handle_unfollow_response)
+        self.network_manager.register_message_handler('LIKE', self.handle_like_message)
+        self.network_manager.register_message_handler('POST_HISTORY_REQUEST', self.handle_post_history_request)
+        self.network_manager.register_message_handler('POST_HISTORY_RESPONSE', self.handle_post_history_response)
         
         # Tic-Tac-Toe game message handlers
         self.network_manager.register_message_handler('TICTACTOE_INVITE', self.handle_tictactoe_invite)
@@ -151,8 +157,6 @@ class MessageHandler:
 
     def handle_post_message(self, msg_dict, addr):
         """Handle broadcast POST messages"""
-        import datetime
-
         user_id = msg_dict.get('USER_ID', 'Unknown')
         content = msg_dict.get('CONTENT', '')
         timestamp = msg_dict.get('TIMESTAMP', None)
@@ -160,19 +164,19 @@ class MessageHandler:
         ttl = msg_dict.get('TTL', '')
         message_id = msg_dict.get('MESSAGE_ID', '')
         token = msg_dict.get('TOKEN', '')
-        
+
         # Check TTL
         if not self._is_message_valid(timestamp, ttl):
             if self.verbose_mode:
                 print(f"\n[EXPIRED] POST from {user_id} has expired - TTL: {ttl}")
             return
-        
+
         # Only process messages from users you follow (if not in verbose mode)
         if not self.verbose_mode and not self.peer_manager.is_following(user_id):
             if self.verbose_mode:
                 print(f"\n[FILTERED] POST from {user_id} ignored - not following this user")
             return
-        
+
         # Store valid message with expiry
         if message_id:
             self._store_message(message_id, msg_dict)
@@ -183,17 +187,25 @@ class MessageHandler:
                 print(f"\n[FILTERED] POST from {user_id} ignored - not following this user")
             return
 
+        # Add likes information
+        likes_count = self.get_post_likes_count(timestamp)
+        liked_by_me = self.is_post_liked_by_user(timestamp, self.peer_manager.user_id)
+        like_status = "❤️" if liked_by_me else "🤍"
+
         if self.verbose_mode:
             # Format timestamp
             if timestamp:
                 try:
                     ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
-                    expiry_time = datetime.datetime.fromtimestamp(int(timestamp) + int(ttl)).strftime('%Y-%m-%d %H:%M:%S')
+                    expiry_time = datetime.datetime.fromtimestamp(
+                        int(timestamp) + int(ttl)
+                    ).strftime('%Y-%m-%d %H:%M:%S')
                 except Exception:
                     ts_str = str(timestamp)
                     expiry_time = str(timestamp)
             else:
                 ts_str = "N/A"
+
             print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
             print(f"TYPE: {msg_type}")
             print(f"USER_ID: {user_id}")
@@ -204,11 +216,18 @@ class MessageHandler:
             # Example token validation (replace with your actual validation logic)
             if token:
                 print("✔ Token valid")
+            # Add likes information in verbose mode
+            print(f"LIKES: {likes_count} {like_status}")
+
         else:
             display_name = self.peer_manager.get_display_name(user_id)
             avatar_info = self.peer_manager.get_avatar_info(user_id)
-            print(f"\n{display_name}{avatar_info}: {content}")
-    
+            like_info = f" {like_status} {likes_count}" if likes_count > 0 else ""
+            print(f"\n{display_name}{avatar_info}: {content}{like_info}")
+            # Store message ID and timestamp for future like/unlike
+            print(f"Post ID: {message_id} (Timestamp: {timestamp})")
+
+
     def handle_dm_message(self, msg_dict, addr):
         """Handle direct messages"""
         import datetime
@@ -351,6 +370,100 @@ class MessageHandler:
             return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
         return False
     
+    def handle_post_history_request(self, msg_dict, addr):
+        """Handle request for post history"""
+        from_user = msg_dict.get('FROM', 'Unknown')
+        to_user = msg_dict.get('TO', '')
+        
+        # Only process if this request is for us
+        if to_user != self.peer_manager.user_id:
+            return
+        
+        # Send post history response
+        self.send_post_history_response(from_user)
+
+    def send_post_history_response(self, to_user):
+        """Send post history to requesting user"""
+        if not self.peer_manager.is_peer_known(to_user):
+            return False
+        
+        # Get all posts from cache
+        posts = []
+        for message_id, (msg, expiry) in self.message_cache.items():
+            if msg.get('TYPE') == 'POST' and msg.get('USER_ID') == self.peer_manager.user_id:
+                # Check if post is still valid
+                current_time = int(time.time())
+                if current_time <= expiry:
+                    posts.append(msg)
+        
+        # Send response
+        message = {
+            'TYPE': 'POST_HISTORY_RESPONSE',
+            'FROM': self.peer_manager.user_id,
+            'TO': to_user,
+            'POSTS': json.dumps(posts),
+            'COUNT': str(len(posts)),
+            'TIMESTAMP': str(int(time.time())),
+            'MESSAGE_ID': self._generate_message_id()
+        }
+        
+        peer_info = self.peer_manager.get_peer_info(to_user)
+        if peer_info:
+            return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+        return False
+    
+    def handle_post_history_response(self, msg_dict, addr):
+        """Handle post history response"""
+        from_user = msg_dict.get('FROM', 'Unknown')
+        to_user = msg_dict.get('TO', '')
+        
+        # Only process if this response is for us
+        if to_user != self.peer_manager.user_id:
+            return
+        
+        try:
+            posts_json = msg_dict.get('POSTS', '[]')
+            posts = json.loads(posts_json)
+            count = int(msg_dict.get('COUNT', '0'))
+            
+            # Store posts in cache
+            for post in posts:
+                message_id = post.get('MESSAGE_ID')
+                timestamp = post.get('TIMESTAMP')
+                ttl = post.get('TTL', DEFAULT_POST_TTL)
+                
+                if message_id and self._is_message_valid(timestamp, ttl):
+                    self._store_message(message_id, post)
+            
+            if self.verbose_mode:
+                print(f"\n[POST HISTORY] Received {count} posts from {from_user}")
+            else:
+                display_name = self.peer_manager.get_display_name(from_user)
+                print(f"\n[POST HISTORY] Received {count} posts from {display_name}")
+                
+        except Exception as e:
+            if self.verbose_mode:
+                print(f"\n[ERROR] Post history processing error: {e}")
+    
+    def request_post_history(self, user_id):
+        """Request recent posts from a user"""
+        if not self.peer_manager.is_peer_known(user_id):
+            return False
+            
+        message = {
+            'TYPE': 'POST_HISTORY_REQUEST',
+            'FROM': self.peer_manager.user_id,
+            'TO': user_id,
+            'TIMESTAMP': str(int(time.time())),
+            'MESSAGE_ID': self._generate_message_id()
+        }
+        
+        # Send message to peer
+        peer_info = self.peer_manager.get_peer_info(user_id)
+        if peer_info:
+            return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+        return False
+    
     def send_profile_message(self, display_name, status, avatar_data=None, avatar_type=None):
         """Send a profile update message"""
         message = {
@@ -393,8 +506,13 @@ class MessageHandler:
         # Check if target peer exists
         if target_user_id in self.peer_manager.known_peers:
             peer_info = self.peer_manager.known_peers[target_user_id]
-            # Use send_to_address instead of broadcast_message
-            return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+            result = self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+            
+            # Request post history after successful follow request
+            if result:
+                self.request_post_history(target_user_id)
+                
+            return result
         return False
     
     def send_unfollow_request(self, target_user_id):
@@ -1346,6 +1464,187 @@ class MessageHandler:
     def get_game_info(self, game_id):
         """Get information about a specific game"""
         return self.active_games.get(game_id)
+    
+    # Like Methods
+    # Add new handler method
+    def handle_like_message(self, msg_dict, addr):
+        """Handle LIKE/UNLIKE messages"""
+        import datetime
+
+        from_user = msg_dict.get('FROM', 'Unknown')
+        to_user = msg_dict.get('TO', '')
+        post_timestamp = msg_dict.get('POST_TIMESTAMP', '')
+        action = msg_dict.get('ACTION', '')
+        timestamp = msg_dict.get('TIMESTAMP', '')
+        token = msg_dict.get('TOKEN', '')
+        msg_type = msg_dict.get('TYPE', 'LIKE')
+        
+        # Only process if this message is for us
+        if to_user != self.peer_manager.user_id:
+            return
+            
+        # Validate post exists and not expired
+        if not self._validate_post(post_timestamp):
+            if self.verbose_mode:
+                print(f"\n[ERROR] Post not found or expired: {post_timestamp}")
+            return
+            
+        # Process like/unlike action
+        if action == 'LIKE':
+            self._add_like(from_user, post_timestamp)
+            if self.verbose_mode:
+                # Format timestamp
+                if timestamp:
+                    try:
+                        ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        ts_str = str(timestamp)
+                else:
+                    ts_str = "N/A"
+                print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
+                print(f"TYPE: {msg_type}")
+                print(f"FROM: {from_user}")
+                print(f"TO: {to_user}")
+                print(f"POST_TIMESTAMP: {post_timestamp}")
+                print(f"ACTION: {action}")
+                print(f"TOKEN: {token}")
+                print(f"✅ {from_user} liked your post from {post_timestamp}")
+            else:
+                display_name = self.peer_manager.get_display_name(from_user)
+                print(f"\n[LIKE] {display_name} liked your post")
+        
+        elif action == 'UNLIKE':
+            self._remove_like(from_user, post_timestamp)
+            if self.verbose_mode:
+                # Format timestamp
+                if timestamp:
+                    try:
+                        ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        ts_str = str(timestamp)
+                else:
+                    ts_str = "N/A"
+                print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
+                print(f"TYPE: {msg_type}")
+                print(f"FROM: {from_user}")
+                print(f"TO: {to_user}")
+                print(f"POST_TIMESTAMP: {post_timestamp}")
+                print(f"ACTION: {action}")
+                print(f"TOKEN: {token}")
+                print(f"✅ {from_user} unliked your post from {post_timestamp}")
+            else:
+                display_name = self.peer_manager.get_display_name(from_user)
+                print(f"\n[UNLIKE] {display_name} unliked your post")
+
+    # Add helper methods for like handling
+    def _validate_post(self, post_timestamp):
+        """Check if post exists and is not expired"""
+        # First, try to convert human-readable timestamp to UNIX timestamp
+        try:
+            import time
+            from datetime import datetime
+            
+            # If it's already a UNIX timestamp (integer), use as is
+            if isinstance(post_timestamp, int) or post_timestamp.isdigit():
+                unix_timestamp = int(post_timestamp)
+            else:
+                # Try to parse human-readable timestamp
+                dt_obj = datetime.strptime(str(post_timestamp).strip(), "%Y-%m-%d %H:%M:%S")
+                unix_timestamp = int(datetime.timestamp(dt_obj))
+                
+            # Find post in message cache by comparing UNIX timestamps
+            for msg_id, (msg, expiry) in self.message_cache.items():
+                if msg.get('TYPE') == 'POST':
+                    stored_ts = msg.get('TIMESTAMP')
+                    # Convert stored timestamp to int if it's a string
+                    if isinstance(stored_ts, str):
+                        stored_ts = int(stored_ts) if stored_ts.isdigit() else stored_ts
+                    
+                    # Compare using both formats
+                    if str(stored_ts) == str(post_timestamp) or str(stored_ts) == str(unix_timestamp):
+                        current_time = int(time.time())
+                        return current_time <= expiry
+                        
+        except Exception as e:
+            print(f"Timestamp conversion error: {e}")
+        
+        # Debug information
+        print(f"Post not found in cache. Looking for: '{post_timestamp}'")
+        print(f"Available timestamps in cache:")
+        for msg_id, (msg, _) in self.message_cache.items():
+            if msg.get('TYPE') == 'POST':
+                print(f"- '{msg.get('TIMESTAMP')}' (ID: {msg_id})")
+        
+        return False
+    
+    def _add_like(self, user_id, post_timestamp):
+        """Add a like to a post"""
+        if post_timestamp not in self.post_likes:
+            self.post_likes[post_timestamp] = {}
+        
+        # Add the like (prevent duplicates by design)
+        self.post_likes[post_timestamp][user_id] = True
+
+    def _remove_like(self, user_id, post_timestamp):
+        """Remove a like from a post"""
+        if post_timestamp in self.post_likes and user_id in self.post_likes[post_timestamp]:
+            del self.post_likes[post_timestamp][user_id]
+            
+            # Clean up empty entries
+            if not self.post_likes[post_timestamp]:
+                del self.post_likes[post_timestamp]
+
+    # Add method to send like/unlike messages
+    def send_like_message(self, to_user, post_timestamp, action='LIKE'):
+        """Send a LIKE or UNLIKE message"""
+        import time
+        
+        if not self.peer_manager.is_peer_known(to_user):
+            return False
+            
+        # Check if already liked/unliked to prevent duplicates
+        if action == 'LIKE' and self.is_post_liked_by_user(post_timestamp, self.peer_manager.user_id):
+            return False
+            
+        # Add this check to prevent unliking posts that haven't been liked
+        if action == 'UNLIKE' and not self.is_post_liked_by_user(post_timestamp, self.peer_manager.user_id):
+            return False
+        
+        # Validate post exists and not expired
+        if not self._validate_post(post_timestamp):
+            return False
+        
+        message = {
+            'TYPE': 'LIKE',
+            'FROM': self.peer_manager.user_id,
+            'TO': to_user,
+            'POST_TIMESTAMP': post_timestamp,
+            'ACTION': action,
+            'TIMESTAMP': str(int(time.time())),
+            'TOKEN': f"{self.peer_manager.user_id}|{int(time.time()) + 3600}|broadcast"  # 1 hour expiry
+        }
+        
+        # Process local like/unlike action immediately
+        if action == 'LIKE':
+            self._add_like(self.peer_manager.user_id, post_timestamp)
+        else:
+            self._remove_like(self.peer_manager.user_id, post_timestamp)
+        
+        peer_info = self.peer_manager.known_peers.get(to_user)
+        if peer_info:
+            return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+        return False
+    
+    # Add getter methods for likes
+    def get_post_likes_count(self, post_timestamp):
+        """Get the number of likes for a post"""
+        if post_timestamp in self.post_likes:
+            return len(self.post_likes[post_timestamp])
+        return 0
+
+    def is_post_liked_by_user(self, post_timestamp, user_id):
+        """Check if a post is liked by a specific user"""
+        return post_timestamp in self.post_likes and user_id in self.post_likes[post_timestamp]
 
     # ==================== HELPER METHODS ====================
 
@@ -1385,21 +1684,38 @@ class MessageHandler:
         
         self.message_cache[message_id] = (msg_dict, expiry_time)
 
+    # Update _ttl_cleanup_loop to clean up likes for expired posts
     def _ttl_cleanup_loop(self):
-        """Periodically clean up expired messages"""
+        """Periodically clean up expired messages and likes"""
         while True:
             try:
-                time.sleep(TTL_CLEANUP_INTERVAL)  # Check every minute by default
+                time.sleep(TTL_CLEANUP_INTERVAL)
                 
                 current_time = int(time.time())
-                expired_ids = [mid for mid, (_, expiry) in self.message_cache.items() 
-                                if expiry <= current_time]
+                expired_ids = []
+                expired_posts = []
                 
+                # Find expired messages
+                for mid, (msg, expiry) in self.message_cache.items():
+                    if expiry <= current_time:
+                        expired_ids.append(mid)
+                        # Track expired posts to clean up likes
+                        if msg.get('TYPE') == 'POST':
+                            post_timestamp = msg.get('TIMESTAMP')
+                            if post_timestamp:
+                                expired_posts.append(post_timestamp)
+                
+                # Delete expired messages
                 for mid in expired_ids:
                     del self.message_cache[mid]
-                    
+                
+                # Clean up likes for expired posts
+                for post_ts in expired_posts:
+                    if post_ts in self.post_likes:
+                        del self.post_likes[post_ts]
+                        
                 if expired_ids and self.verbose_mode:
-                    print(f"\n[TTL] Cleaned up {len(expired_ids)} expired messages")
+                    print(f"\n[TTL] Cleaned up {len(expired_ids)} expired messages and likes for {len(expired_posts)} posts")
                     
             except Exception as e:
                 if self.verbose_mode:
