@@ -9,10 +9,21 @@ import json
 import sys
 import os
 import datetime
+import base64
 
 # Add parent directories to path for protocol access
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from protocol.protocol import Protocol
+
+# ANSI Color codes for board display
+class Colors:
+    RED = '\033[91m'      # Red for X
+    GREEN = '\033[92m'    # Green for O
+    YELLOW = '\033[93m'   # Yellow for usernames
+    BLUE = '\033[94m'     # Blue for filenames
+    CYAN = '\033[96m'     # Cyan for file transfer messages
+    RESET = '\033[0m'     # Reset to default color
+    BOLD = '\033[1m'      # Bold text
 
 
 class MessageHandler:
@@ -29,6 +40,7 @@ class MessageHandler:
     def _register_handlers(self):
         """Register all message type handlers"""
         self.network_manager.register_message_handler('PEER_DISCOVERY', self.handle_peer_discovery)
+        self.network_manager.register_message_handler('PING', self.handle_ping)
         self.network_manager.register_message_handler('POST', self.handle_post_message)
         self.network_manager.register_message_handler('DM', self.handle_dm_message)
         self.network_manager.register_message_handler('PROFILE', self.handle_profile_message)
@@ -39,10 +51,28 @@ class MessageHandler:
         self.network_manager.register_message_handler('FOLLOW_RESPONSE', self.handle_follow_response)
         self.network_manager.register_message_handler('UNFOLLOW_RESPONSE', self.handle_unfollow_response)
         
-        # Group chat message handlers
-        self.network_manager.register_message_handler('GROUP_CREATE', self.handle_group_create)
-        self.network_manager.register_message_handler('GROUP_UPDATE', self.handle_group_update)
-        self.network_manager.register_message_handler('GROUP_MESSAGE', self.handle_group_message)
+        # Tic-Tac-Toe game message handlers
+        self.network_manager.register_message_handler('TICTACTOE_INVITE', self.handle_tictactoe_invite)
+        self.network_manager.register_message_handler('TICTACTOE_MOVE', self.handle_tictactoe_move)
+        self.network_manager.register_message_handler('TICTACTOE_RESULT', self.handle_tictactoe_result)
+        
+        # File transfer message handlers
+        self.network_manager.register_message_handler('FILE_OFFER', self.handle_file_offer)
+        self.network_manager.register_message_handler('FILE_CHUNK', self.handle_file_chunk)
+        self.network_manager.register_message_handler('FILE_RECEIVED', self.handle_file_received)
+        self.network_manager.register_message_handler('FILE_ACCEPT', self.handle_file_accept)
+        self.network_manager.register_message_handler('FILE_REJECT', self.handle_file_reject)
+        
+        # Game state storage
+        self.active_games = {}  # game_id -> game_state
+        self.game_counter = 0  # Counter for generating game IDs
+        self.pending_invitations = {}  # game_id -> invitation_info
+        
+        # File transfer state storage
+        self.active_file_transfers = {}  # transfer_id -> transfer_state
+        self.file_transfer_counter = 0  # Counter for generating transfer IDs
+        self.pending_file_offers = {}  # transfer_id -> offer_info
+        self.receiving_files = {}  # transfer_id -> received_chunks
         
         # Like message handlers
         self.network_manager.register_message_handler('LIKE', self.handle_like_message)
@@ -83,6 +113,23 @@ class MessageHandler:
     def handle_peer_discovery(self, msg_dict, addr):
         """Handle peer discovery messages"""
         self.peer_manager.handle_peer_discovery(msg_dict, addr)
+        
+    def handle_ping(self, msg_dict, addr):
+        """Handle PING messages according to LSNP protocol"""
+        user_id = msg_dict.get('USER_ID', 'Unknown')
+        timestamp = msg_dict.get('TIMESTAMP', None)
+        
+        # Update peer information (similar to discovery but specifically for PING)
+        self.peer_manager.update_peer_info(user_id, addr[0], addr[1])
+        
+        if self.verbose_mode:
+            try:
+                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S') if timestamp else "N/A"
+            except Exception:
+                ts_str = str(timestamp)
+            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: PING")
+            print(f"TYPE: PING")
+            print(f"USER_ID: {user_id}")
     
     def handle_profile_message(self, msg_dict, addr):
         """Handle profile update messages"""
@@ -947,152 +994,419 @@ class MessageHandler:
                 else:
                     display_name = self.peer_manager.get_display_name(from_user)
                     print(f"\n[UNFOLLOW] Unfollow request to {display_name} failed")
-                    
-    # Group message handlers
-    def handle_group_create(self, msg_dict, addr):
-        """Handle group creation messages"""
-        import datetime
 
-        from_user = msg_dict.get('FROM', 'Unknown')
-        group_id = msg_dict.get('GROUP_ID', '')
-        group_name = msg_dict.get('GROUP_NAME', '')
-        members_str = msg_dict.get('MEMBERS', '')
-        timestamp = msg_dict.get('TIMESTAMP', int(time.time()))
-        
-        # Parse members list
-        if members_str:
-            members = set(member.strip() for member in members_str.split(',') if member.strip())
-        else:
-            members = set()
-            
-        # Always include creator
-        members.add(from_user)
-        
-        if self.verbose_mode:
-            # Format timestamp
-            try:
-                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
-            except Exception:
-                ts_str = str(timestamp)
-                
-            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: GROUP_CREATE")
-            print(f"FROM: {from_user}")
-            print(f"GROUP_ID: {group_id}")
-            print(f"GROUP_NAME: {group_name}")
-            print(f"MEMBERS: {members_str}")
-            print(f"TIMESTAMP: {timestamp}")
-        else:
-            print(f"\nYou've been added to {group_name}")
-            
-        # Add group to peer manager
-        self.peer_manager.add_group(group_id, group_name, from_user, members, int(timestamp))
+    # ==================== TIC-TAC-TOE GAME METHODS ====================
     
-    def handle_group_update(self, msg_dict, addr):
-        """Handle group update messages"""
-        import datetime
-
-        from_user = msg_dict.get('FROM', 'Unknown')
-        group_id = msg_dict.get('GROUP_ID', '')
-        add_members_str = msg_dict.get('ADD', '')
-        remove_members_str = msg_dict.get('REMOVE', '')
-        timestamp = msg_dict.get('TIMESTAMP', int(time.time()))
+    def send_tictactoe_invite(self, target_user_id, chosen_symbol='X', first_move_position=None):
+        """Send a Tic-Tac-Toe game invitation to another peer"""
+        if not self.peer_manager.is_peer_known(target_user_id):
+            return False
         
-        # Parse add/remove lists
-        add_members = set(member.strip() for member in add_members_str.split(',') if member.strip())
-        remove_members = set(member.strip() for member in remove_members_str.split(',') if member.strip())
+        game_id = self._generate_game_id()
         
-        if self.verbose_mode:
-            # Format timestamp
-            try:
-                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
-            except Exception:
-                ts_str = str(timestamp)
-                
-            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: GROUP_UPDATE")
-            print(f"FROM: {from_user}")
-            print(f"GROUP_ID: {group_id}")
-            if add_members:
-                print(f"ADD: {add_members_str}")
-            if remove_members:
-                print(f"REMOVE: {remove_members_str}")
-            print(f"TIMESTAMP: {timestamp}")
+        # Set up players based on chosen symbol
+        if chosen_symbol == 'X':
+            player_x = self.peer_manager.user_id
+            player_o = target_user_id
+            current_turn = 'X'
+        else:  # chosen_symbol == 'O'
+            player_x = target_user_id
+            player_o = self.peer_manager.user_id
+            current_turn = 'X'  # X always goes first
+        
+        # Initialize board
+        board = ['0', '1', '2', '3', '4', '5', '6', '7', '8']
+        
+        # If choosing X and making first move
+        if chosen_symbol == 'X' and first_move_position is not None:
+            if not self._is_valid_move(board, first_move_position):
+                return False  # Invalid first move
+            board[first_move_position] = 'X'
+            current_turn = 'O'  # Switch to O's turn
+        
+        message = {
+            'TYPE': 'TICTACTOE_INVITE',
+            'FROM': self.peer_manager.user_id,
+            'TO': target_user_id,
+            'GAMEID': game_id,
+            'MESSAGE_ID': self._generate_message_id(),
+            'SYMBOL': chosen_symbol,
+            'TIMESTAMP': str(int(time.time())),
+            'TOKEN': f"{self.peer_manager.user_id}|{int(time.time())}|game",
+            'BOARD': ','.join(board)
+        }
+        
+        # Initialize game state
+        self.active_games[game_id] = {
+            'player_x': player_x,
+            'player_o': player_o,
+            'board': board,
+            'current_turn': current_turn,
+            'status': 'waiting_for_response',
+            'turn_number': 1 if first_move_position is not None else 1
+        }
+        
+        peer_info = self.peer_manager.get_peer_info(target_user_id)
+        if peer_info:
+            return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+        return False
+    
+    def send_tictactoe_move(self, game_id, position):
+        """Send a Tic-Tac-Toe move"""
+        if game_id not in self.active_games:
+            return False
+        
+        game = self.active_games[game_id]
+        current_player = self.peer_manager.user_id
+        
+        # Determine if we are X or O
+        if current_player == game['player_x']:
+            player_symbol = 'X'
+            opponent = game['player_o']
         else:
-            group_name = self.peer_manager.get_group_name(group_id) or group_id
-            print(f"\nThe group \"{group_name}\" member list was updated.")
-            
-        # Update group in peer manager
-        self.peer_manager.update_group(group_id, from_user, add_members, remove_members)
-        import datetime
-
+            player_symbol = 'O'
+            opponent = game['player_x']
+        
+        # Validate it's our turn
+        if game['current_turn'] != player_symbol:
+            return False
+        
+        # Validate position is available
+        if not self._is_valid_move(game['board'], position):
+            return False
+        
+        # Make the move
+        game['board'][position] = player_symbol
+        
+        # Check for win or draw
+        result = self._check_game_result(game['board'])
+        
+        # Increment turn number
+        game['turn_number'] = game.get('turn_number', 1) + 1
+        
+        message = {
+            'TYPE': 'TICTACTOE_MOVE',
+            'FROM': self.peer_manager.user_id,
+            'TO': opponent,
+            'GAMEID': game_id,
+            'MESSAGE_ID': self._generate_message_id(),
+            'POSITION': str(position),
+            'SYMBOL': player_symbol,
+            'TURN': str(game['turn_number']),
+            'TOKEN': f"{self.peer_manager.user_id}|{int(time.time())}|game"
+        }
+        
+        # Switch turns
+        game['current_turn'] = 'O' if player_symbol == 'X' else 'X'
+        
+        # If game ended, send result
+        if result['finished']:
+            game['status'] = 'finished'
+            self._send_game_result(game_id, result, opponent)
+        
+        peer_info = self.peer_manager.get_peer_info(opponent)
+        if peer_info:
+            return self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+        return False
+    
+    def handle_tictactoe_invite(self, msg_dict, addr):
+        """Handle incoming Tic-Tac-Toe game invitation"""
         from_user = msg_dict.get('FROM', 'Unknown')
-        group_id = msg_dict.get('GROUP_ID', '')
-        add_members_str = msg_dict.get('ADD', '')
-        remove_members_str = msg_dict.get('REMOVE', '')
+        to_user = msg_dict.get('TO', '')
+        game_id = msg_dict.get('GAMEID', '')
+        inviter_symbol = msg_dict.get('SYMBOL', 'X')
+        board_str = msg_dict.get('BOARD', '0,1,2,3,4,5,6,7,8')
         timestamp = msg_dict.get('TIMESTAMP', None)
+        message_id = msg_dict.get('MESSAGE_ID', '')
         token = msg_dict.get('TOKEN', '')
-        msg_type = msg_dict.get('TYPE', 'GROUP_UPDATE')
+        
+        # Only process if this invitation is for us
+        if to_user == self.peer_manager.user_id:
+            # Set up players based on inviter's choice
+            if inviter_symbol == 'X':
+                player_x = from_user
+                player_o = self.peer_manager.user_id
+                our_symbol = 'O'
+                their_symbol = 'X'
+            else:  # inviter_symbol == 'O'
+                player_x = self.peer_manager.user_id
+                player_o = from_user
+                our_symbol = 'X'
+                their_symbol = 'O'
+            
+            # Parse board
+            board = board_str.split(',')
+            
+            # Determine current turn (X always goes first, but board might already have moves)
+            x_moves = sum(1 for cell in board if cell == 'X')
+            o_moves = sum(1 for cell in board if cell == 'O')
+            current_turn = 'X' if x_moves == o_moves else 'O'
+            
+            # Store the game state
+            self.active_games[game_id] = {
+                'player_x': player_x,
+                'player_o': player_o,
+                'board': board,
+                'current_turn': current_turn,
+                'status': 'active',
+                'turn_number': x_moves + o_moves + 1
+            }
+            
+            if self.verbose_mode:
+                # Format timestamp
+                if timestamp:
+                    try:
+                        ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        ts_str = str(timestamp)
+                else:
+                    ts_str = "N/A"
+                
+                print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: TICTACTOE_INVITE")
+                print(f"TYPE: TICTACTOE_INVITE")
+                print(f"FROM: {from_user}")
+                print(f"TO: {to_user}")
+                print(f"GAMEID: {game_id}")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"SYMBOL: {inviter_symbol}")
+                print(f"TIMESTAMP: {timestamp}")
+                print(f"TOKEN: {token}")
+            else:
+                display_name = self.peer_manager.get_display_name(from_user)
+                print(f"\n🎮 [GAME] {display_name} invited you to play Tic-Tac-Toe!")
+            
+            print(f"Game ID: {game_id}")
+            print(f"You are '{our_symbol}', they are '{their_symbol}'")
+            
+            # Show current board state
+            self._display_board(board)
+            
+            # Check if it's already our turn (in case they made first move as X)
+            if current_turn == our_symbol:
+                print(f"It's your turn! Use: GAME {game_id} <position>")
+            else:
+                display_name = self.peer_manager.get_display_name(from_user)
+                print(f"Waiting for {display_name} ({their_symbol}) to make their move.")
+    
+    def handle_tictactoe_move(self, msg_dict, addr):
+        """Handle incoming Tic-Tac-Toe move"""
+        from_user = msg_dict.get('FROM', 'Unknown')
+        to_user = msg_dict.get('TO', '')
+        game_id = msg_dict.get('GAMEID', '')
+        position = int(msg_dict.get('POSITION', 0))
+        symbol = msg_dict.get('SYMBOL', '')
+        turn = msg_dict.get('TURN', '1')
+        timestamp = msg_dict.get('TIMESTAMP', None)
+        message_id = msg_dict.get('MESSAGE_ID', '')
+        token = msg_dict.get('TOKEN', '')
+        
+        # Only process if this move is for us
+        if to_user == self.peer_manager.user_id and game_id in self.active_games:
+            game = self.active_games[game_id]
+            
+            # Update board with the move
+            game['board'][position] = symbol
+            
+            # Update turn number
+            game['turn_number'] = int(turn)
+            
+            # Update current turn to switch to us (since opponent just played)
+            game['current_turn'] = 'O' if symbol == 'X' else 'X'
+            
+            # Check game result
+            result = self._check_game_result(game['board'])
+            
+            if self.verbose_mode:
+                # Format timestamp
+                if timestamp:
+                    try:
+                        ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        ts_str = str(timestamp)
+                else:
+                    ts_str = "N/A"
+                
+                print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: TICTACTOE_MOVE")
+                print(f"TYPE: TICTACTOE_MOVE")
+                print(f"FROM: {from_user}")
+                print(f"TO: {to_user}")
+                print(f"GAMEID: {game_id}")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"POSITION: {position}")
+                print(f"SYMBOL: {symbol}")
+                print(f"TURN: {turn}")
+                print(f"TOKEN: {token}")
+            else:
+                display_name = self.peer_manager.get_display_name(from_user)
+                print(f"\n🎮 [GAME] {display_name} played {symbol} at position {position}")
+            
+            self._display_board(game['board'])
+            
+            if result['finished']:
+                game['status'] = 'finished'
+                if result['winner']:
+                    if result['winner'] == 'X':
+                        winner_name = self.peer_manager.get_display_name(game['player_x'])
+                        print(f"🏆 Game Over! {winner_name} (X) wins!")
+                    else:
+                        winner_name = self.peer_manager.get_display_name(game['player_o'])
+                        print(f"🏆 Game Over! {winner_name} (O) wins!")
+                else:
+                    print("🤝 Game Over! It's a draw!")
+                
+                # Clean up game
+                del self.active_games[game_id]
+            else:
+                # It's our turn now
+                current_player = self.peer_manager.user_id
+                if current_player == game['player_x']:
+                    your_symbol = 'X'
+                else:
+                    your_symbol = 'O'
+                print(f"Your turn! You are '{your_symbol}'. Use: GAME {game_id} <position>")
+    
+    def handle_tictactoe_result(self, msg_dict, addr):
+        """Handle Tic-Tac-Toe game result"""
+        from_user = msg_dict.get('FROM', 'Unknown')
+        to_user = msg_dict.get('TO', '')
+        game_id = msg_dict.get('GAMEID', '')
+        result_type = msg_dict.get('RESULT', '')
+        symbol = msg_dict.get('SYMBOL', '')
+        winning_line = msg_dict.get('WINNING_LINE', '')
+        timestamp = msg_dict.get('TIMESTAMP', None)
         message_id = msg_dict.get('MESSAGE_ID', '')
         
-        # Parse member lists
-        add_members = add_members_str.split(',') if add_members_str else []
-        remove_members = remove_members_str.split(',') if remove_members_str else []
-        
-        # Check if we know about this group
-        group = self.peer_manager.get_group(group_id)
-        if not group:
-            return
-            
-        # Check if update is from group creator
-        if group['creator'] != from_user:
+        # Only process if this result is for us
+        if to_user == self.peer_manager.user_id and game_id in self.active_games:
             if self.verbose_mode:
-                print(f"\n[ERROR] Group update from non-creator {from_user} rejected")
-            return
+                # Format timestamp
+                if timestamp:
+                    try:
+                        ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        ts_str = str(timestamp)
+                else:
+                    ts_str = "N/A"
+                print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: TICTACTOE_RESULT")
+                print(f"TYPE: TICTACTOE_RESULT")
+                print(f"FROM: {from_user}")
+                print(f"TO: {to_user}")
+                print(f"GAMEID: {game_id}")
+                print(f"MESSAGE_ID: {message_id}")
+                print(f"RESULT: {result_type}")
+                print(f"SYMBOL: {symbol}")
+                print(f"WINNING_LINE: {winning_line}")
+                print(f"TIMESTAMP: {timestamp}")
             
-        # Check if we are being removed
-        if self.peer_manager.user_id in remove_members:
-            success, message = self.peer_manager.leave_group(group_id)
-            if success and not self.verbose_mode:
-                print(f"\nYou've been removed from the group \"{group['name']}\"")
-            return
+            game = self.active_games[game_id]
+            display_name = self.peer_manager.get_display_name(from_user)
             
-        # Apply updates to local group
-        # Add new members
-        for member in add_members:
-            if member not in group['members']:
-                group['members'].append(member)
-                
-        # Remove members
-        for member in remove_members:
-            if member in group['members'] and member != group['creator']:
-                group['members'].remove(member)
-        
-        if self.verbose_mode:
-            # Format timestamp
-            if timestamp:
-                try:
-                    ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
-                except Exception:
-                    ts_str = str(timestamp)
-            else:
-                ts_str = "N/A"
-            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
-            print(f"TYPE: {msg_type}")
-            print(f"FROM: {from_user}")
-            print(f"GROUP_ID: {group_id}")
-            print(f"ADD: {add_members_str}")
-            print(f"REMOVE: {remove_members_str}")
-            print(f"TIMESTAMP: {timestamp}")
-            print(f"TOKEN: {token}")
-            print(f"MESSAGE_ID: {message_id}")
-            print(f"✅ Group updated successfully")
-        else:
-            print(f"\nThe group \"{group['name']}\" member list was updated.")
+            if result_type == 'WIN' and symbol:
+                if symbol == 'X':
+                    winner_name = self.peer_manager.get_display_name(game['player_x'])
+                    print(f"🏆 Game Over! {winner_name} (X) wins!")
+                else:
+                    winner_name = self.peer_manager.get_display_name(game['player_o'])
+                    print(f"🏆 Game Over! {winner_name} (O) wins!")
+            elif result_type == 'DRAW':
+                print("🤝 Game Over! It's a draw!")
+            
+            # Clean up game
+            del self.active_games[game_id]
     
-    def handle_group_message(self, msg_dict, addr):
-        """Handle messages to groups"""
-        import datetime
-
-        from_user = msg_dict.get('FROM', 'Unknown')
+    def _send_game_result(self, game_id, result, opponent):
+        """Send game result to opponent"""
+        winning_line = ""
+        if result['winning_line']:
+            winning_line = ','.join(map(str, result['winning_line']))
+        
+        message = {
+            'TYPE': 'TICTACTOE_RESULT',
+            'FROM': self.peer_manager.user_id,
+            'TO': opponent,
+            'GAMEID': game_id,
+            'MESSAGE_ID': self._generate_message_id(),
+            'RESULT': 'WIN' if result['winner'] else 'DRAW',
+            'SYMBOL': result['winner'] or '',
+            'WINNING_LINE': winning_line,
+            'TIMESTAMP': str(int(time.time()))
+        }
+        
+        peer_info = self.peer_manager.get_peer_info(opponent)
+        if peer_info:
+            self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+    
+    def _generate_game_id(self):
+        """Generate a unique game ID in format gX where X is 0-255"""
+        game_id = f"g{self.game_counter}"
+        self.game_counter = (self.game_counter + 1) % 256  # Keep within 0-255 range
+        return game_id
+    
+    def _is_valid_move(self, board, position):
+        """Check if a move is valid"""
+        if position < 0 or position > 8:
+            return False
+        return board[position] not in ['X', 'O']
+    
+    def _check_game_result(self, board):
+        """Check if the game has ended and return result"""
+        # Check rows
+        for i in range(0, 9, 3):
+            if board[i] == board[i+1] == board[i+2] and board[i] in ['X', 'O']:
+                return {'finished': True, 'winner': board[i], 'winning_line': [i, i+1, i+2]}
+        
+        # Check columns
+        for i in range(3):
+            if board[i] == board[i+3] == board[i+6] and board[i] in ['X', 'O']:
+                return {'finished': True, 'winner': board[i], 'winning_line': [i, i+3, i+6]}
+        
+        # Check diagonals
+        if board[0] == board[4] == board[8] and board[0] in ['X', 'O']:
+            return {'finished': True, 'winner': board[0], 'winning_line': [0, 4, 8]}
+        if board[2] == board[4] == board[6] and board[2] in ['X', 'O']:
+            return {'finished': True, 'winner': board[2], 'winning_line': [2, 4, 6]}
+        
+        # Check for draw
+        if all(cell in ['X', 'O'] for cell in board):
+            return {'finished': True, 'winner': None, 'winning_line': None}
+        
+        # Game continues
+        return {'finished': False, 'winner': None, 'winning_line': None}
+    
+    def _display_board(self, board):
+        """Display the Tic-Tac-Toe board with colored X (red) and O (green)"""
+        def colorize_cell(cell):
+            if cell == 'X':
+                return f"{Colors.BOLD}{Colors.RED}X{Colors.RESET}"
+            elif cell == 'O':
+                return f"{Colors.BOLD}{Colors.GREEN}O{Colors.RESET}"
+            else:
+                return cell
+        
+        print("\n   |   |   ")
+        print(f" {colorize_cell(board[0])} | {colorize_cell(board[1])} | {colorize_cell(board[2])} ")
+        print("___|___|___")
+        print("   |   |   ")
+        print(f" {colorize_cell(board[3])} | {colorize_cell(board[4])} | {colorize_cell(board[5])} ")
+        print("___|___|___")
+        print("   |   |   ")
+        print(f" {colorize_cell(board[6])} | {colorize_cell(board[7])} | {colorize_cell(board[8])} ")
+        print("   |   |   ")
+    
+    # File Transfer Methods
+    def handle_file_offer(self, msg_dict, addr):
+        """Handle FILE_OFFER message"""
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            filename = msg_dict.get('filename')
+            file_size = msg_dict.get('file_size')
+            file_type = msg_dict.get('file_type', 'unknown')
+            description = msg_dict.get('description', 'No description')
+            sender_name = msg_dict.get('sender_name', f"Unknown@{addr[0]}")
+            
+            if not all([transfer_id, filename, file_size]):
+                print(f"{Colors.RED}Error: Invalid file offer received{Colors.RESET}")
+                return
         group_id = msg_dict.get('GROUP_ID', '')
         content = msg_dict.get('CONTENT', '')
         timestamp = msg_dict.get('TIMESTAMP', int(time.time()))
@@ -1253,37 +1567,320 @@ class MessageHandler:
         if not group:
             return
             
-        # Check if we are a member of this group
-        if not self.peer_manager.is_group_member(group_id):
-            return
+            # Store the file offer
+            self.pending_file_offers[transfer_id] = {
+                'filename': filename,
+                'file_size': int(file_size),
+                'file_type': file_type,
+                'description': description,
+                'sender_name': sender_name,
+                'sender_addr': addr,
+                'timestamp': time.time()
+            }
             
-        # Check if sender is a member of the group
-        if from_user not in group['members']:
-            if self.verbose_mode:
-                print(f"\n[ERROR] Group message from non-member {from_user} rejected")
-            return
+            print(f"\n{Colors.CYAN}📁 File Offer Received!{Colors.RESET}")
+            print(f"From: {Colors.YELLOW}{sender_name}{Colors.RESET}")
+            print(f"File: {Colors.BLUE}{filename}{Colors.RESET}")
+            print(f"Size: {self._format_file_size(int(file_size))}")
+            print(f"Type: {file_type}")
+            print(f"Description: {description}")
+            print(f"Transfer ID: {transfer_id}")
+            print(f"Use 'FILE ACCEPT {transfer_id}' to accept or 'FILE REJECT {transfer_id}' to reject")
             
-        if self.verbose_mode:
-            # Format timestamp
-            if timestamp:
-                try:
-                    ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
-                except Exception:
-                    ts_str = str(timestamp)
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file offer: {e}{Colors.RESET}")
+    
+    def handle_file_chunk(self, msg_dict, addr):
+        """Handle FILE_CHUNK message"""
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            chunk_number = msg_dict.get('chunk_number')
+            total_chunks = msg_dict.get('total_chunks')
+            chunk_data = msg_dict.get('chunk_data')
+            
+            if not all([transfer_id, chunk_number is not None, total_chunks, chunk_data]):
+                print(f"{Colors.RED}Error: Invalid file chunk received{Colors.RESET}")
+                return
+            
+            chunk_number = int(chunk_number)
+            total_chunks = int(total_chunks)
+            
+            print(f"Debug: Received chunk {chunk_number}/{total_chunks}, data length: {len(chunk_data)}")
+            
+            # Initialize receiving file structure if needed
+            if transfer_id not in self.receiving_files:
+                self.receiving_files[transfer_id] = {
+                    'chunks': {},
+                    'total_chunks': total_chunks,
+                    'received_count': 0,
+                    'sender_addr': addr
+                }
+                print(f"Debug: Initialized receiving structure for {transfer_id}")
+            
+            # Store the chunk
+            if chunk_number not in self.receiving_files[transfer_id]['chunks']:
+                self.receiving_files[transfer_id]['chunks'][chunk_number] = chunk_data
+                self.receiving_files[transfer_id]['received_count'] += 1
+                
+                received = self.receiving_files[transfer_id]['received_count']
+                print(f"{Colors.CYAN}Receiving chunk {chunk_number + 1}/{total_chunks} ({received}/{total_chunks} total){Colors.RESET}")
+                
+                # Check if all chunks received
+                if received == total_chunks:
+                    print(f"Debug: All chunks received, reassembling file...")
+                    self._reassemble_file(transfer_id)
             else:
-                ts_str = "N/A"
-            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: {msg_type}")
-            print(f"TYPE: {msg_type}")
-            print(f"FROM: {from_user}")
-            print(f"GROUP_ID: {group_id}")
-            print(f"CONTENT: {content}")
-            print(f"TIMESTAMP: {timestamp}")
-            print(f"TOKEN: {token}")
-            print(f"MESSAGE_ID: {message_id}")
-        else:
-            display_name = self.peer_manager.get_display_name(from_user)
-            avatar_info = self.peer_manager.get_avatar_info(from_user)
-            print(f"\n[{group['name']}] {display_name}{avatar_info}: {content}")
+                print(f"Debug: Chunk {chunk_number} already received, skipping")
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file chunk: {e}{Colors.RESET}")
+    
+    def handle_file_received(self, msg_dict, addr):
+        """Handle FILE_RECEIVED confirmation"""
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            status = msg_dict.get('status')
+            receiver_name = msg_dict.get('receiver_name', f"Unknown@{addr[0]}")
+            
+            if transfer_id in self.active_file_transfers:
+                transfer_info = self.active_file_transfers[transfer_id]
+                filename = transfer_info.get('filename', 'unknown file')
+                
+                if status == 'success':
+                    print(f"\n{Colors.GREEN}✅ File transfer completed!{Colors.RESET}")
+                    print(f"File '{Colors.BLUE}{filename}{Colors.RESET}' successfully received by {Colors.YELLOW}{receiver_name}{Colors.RESET}")
+                else:
+                    print(f"\n{Colors.RED}❌ File transfer failed!{Colors.RESET}")
+                    print(f"File '{Colors.BLUE}{filename}{Colors.RESET}' transfer to {Colors.YELLOW}{receiver_name}{Colors.RESET} failed: {status}")
+                
+                # Clean up transfer state
+                del self.active_file_transfers[transfer_id]
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file received confirmation: {e}{Colors.RESET}")
+    
+    def _reassemble_file(self, transfer_id):
+        """Reassemble file from chunks and save to disk"""
+        try:
+            if transfer_id not in self.receiving_files:
+                return
+            
+            file_info = self.receiving_files[transfer_id]
+            chunks = file_info['chunks']
+            total_chunks = file_info['total_chunks']
+            sender_addr = file_info['sender_addr']
+            
+            print(f"Debug: File info total_chunks: {total_chunks}")
+            print(f"Debug: Available chunks: {list(chunks.keys())}")
+            print(f"Debug: Chunk count: {len(chunks)}")
+            
+            # Get file offer info
+            if transfer_id not in self.pending_file_offers:
+                print(f"{Colors.RED}Error: File offer info not found for transfer {transfer_id}{Colors.RESET}")
+                return
+            
+            offer_info = self.pending_file_offers[transfer_id]
+            filename = offer_info['filename']
+            
+            # Reassemble file data
+            file_data = b''
+            print(f"Debug: Reassembling {total_chunks} chunks...")
+            for i in range(total_chunks):
+                if i in chunks:
+                    try:
+                        chunk_bytes = base64.b64decode(chunks[i])
+                        file_data += chunk_bytes
+                        print(f"Debug: Chunk {i} decoded: {len(chunk_bytes)} bytes")
+                    except Exception as e:
+                        print(f"{Colors.RED}Error decoding chunk {i}: {e}{Colors.RESET}")
+                        self._send_file_received(transfer_id, sender_addr, 'decode_error')
+                        return
+                else:
+                    print(f"{Colors.RED}Missing chunk {i}, cannot reassemble file{Colors.RESET}")
+                    self._send_file_received(transfer_id, sender_addr, 'missing_chunks')
+                    return
+            
+            print(f"Debug: Total reassembled file size: {len(file_data)} bytes")
+            print(f"Debug: File data preview: {file_data[:50]}...")
+            
+            # Save file to downloads directory
+            downloads_dir = os.path.join(os.getcwd(), 'downloads')
+            os.makedirs(downloads_dir, exist_ok=True)
+            
+            # Handle filename conflicts
+            file_path = os.path.join(downloads_dir, filename)
+            counter = 1
+            base_name, ext = os.path.splitext(filename)
+            while os.path.exists(file_path):
+                new_filename = f"{base_name}_{counter}{ext}"
+                file_path = os.path.join(downloads_dir, new_filename)
+                counter += 1
+            
+            # Write file
+            with open(file_path, 'wb') as f:
+                f.write(file_data)
+            
+            print(f"\n{Colors.GREEN}📁 File saved successfully!{Colors.RESET}")
+            print(f"Location: {Colors.BLUE}{file_path}{Colors.RESET}")
+            print(f"Size: {self._format_file_size(len(file_data))}")
+            
+            # Send confirmation
+            self._send_file_received(transfer_id, sender_addr, 'success')
+            
+            # Clean up
+            del self.receiving_files[transfer_id]
+            del self.pending_file_offers[transfer_id]
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error reassembling file: {e}{Colors.RESET}")
+            if transfer_id in self.receiving_files:
+                sender_addr = self.receiving_files[transfer_id]['sender_addr']
+                self._send_file_received(transfer_id, sender_addr, 'write_error')
+    
+    def _send_file_received(self, transfer_id, addr, status):
+        """Send FILE_RECEIVED confirmation message"""
+        try:
+            msg_dict = {
+                'TYPE': 'FILE_RECEIVED',
+                'transfer_id': transfer_id,
+                'status': status,
+                'receiver_name': self.peer_manager.get_self_info().get('name', 'Unknown')
+            }
+            
+            self.network_manager.send_to_address(msg_dict, addr[0], addr[1])
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error sending file received confirmation: {e}{Colors.RESET}")
+    
+    def _format_file_size(self, size_bytes):
+        """Format file size in human readable format"""
+        if size_bytes == 0:
+            return "0 B"
+        size_names = ["B", "KB", "MB", "GB"]
+        i = 0
+        while size_bytes >= 1024.0 and i < len(size_names) - 1:
+            size_bytes /= 1024.0
+            i += 1
+        return f"{size_bytes:.1f} {size_names[i]}"
+    
+    def handle_file_accept(self, msg_dict, addr):
+        """Handle FILE_ACCEPT message"""
+        print(f"Debug: FILE_ACCEPT handler called from {addr}")
+        print(f"Debug: Message content: {msg_dict}")
+        
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            receiver_name = msg_dict.get('receiver_name', f"Unknown@{addr[0]}")
+            
+            print(f"Debug: Received FILE_ACCEPT for transfer {transfer_id}")
+            print(f"Debug: Active transfers: {list(self.active_file_transfers.keys())}")
+            
+            if transfer_id not in self.active_file_transfers:
+                print(f"{Colors.RED}Error: Transfer {transfer_id} not found{Colors.RESET}")
+                print(f"Debug: Available transfers: {list(self.active_file_transfers.keys())}")
+                return
+            
+            transfer_info = self.active_file_transfers[transfer_id]
+            filename = transfer_info['filename']
+            file_path = transfer_info['file_path']
+            
+            print(f"\n{Colors.GREEN}✅ File offer accepted!{Colors.RESET}")
+            print(f"Receiver: {Colors.YELLOW}{receiver_name}{Colors.RESET}")
+            print(f"File: {Colors.BLUE}{filename}{Colors.RESET}")
+            print(f"Starting file transfer...")
+            
+            # Update transfer status
+            transfer_info['status'] = 'sending'
+            transfer_info['receiver_name'] = receiver_name
+            
+            # Start sending file chunks
+            self._send_file_chunks(transfer_id, file_path, addr)
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file accept: {e}{Colors.RESET}")
+    
+    def handle_file_reject(self, msg_dict, addr):
+        """Handle FILE_REJECT message"""
+        try:
+            transfer_id = msg_dict.get('transfer_id')
+            receiver_name = msg_dict.get('receiver_name', f"Unknown@{addr[0]}")
+            
+            if transfer_id not in self.active_file_transfers:
+                print(f"{Colors.RED}Error: Transfer {transfer_id} not found{Colors.RESET}")
+                return
+            
+            transfer_info = self.active_file_transfers[transfer_id]
+            filename = transfer_info['filename']
+            
+            print(f"\n{Colors.RED}❌ File offer rejected{Colors.RESET}")
+            print(f"Receiver: {Colors.YELLOW}{receiver_name}{Colors.RESET}")
+            print(f"File: {Colors.BLUE}{filename}{Colors.RESET}")
+            
+            # Clean up transfer
+            del self.active_file_transfers[transfer_id]
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file reject: {e}{Colors.RESET}")
+    
+    def _send_file_chunks(self, transfer_id, file_path, addr):
+        """Send file as chunks to receiver"""
+        try:
+            chunk_size = 64 * 1024  # 64KB chunks
+            
+            print(f"Debug: Reading file from path: {file_path}")
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+            
+            print(f"Debug: File data length: {len(file_data)} bytes")
+            print(f"Debug: File data preview: {file_data[:50]}...")
+            
+            # Calculate chunks
+            total_chunks = (len(file_data) + chunk_size - 1) // chunk_size
+            
+            print(f"Sending {total_chunks} chunks...")
+            
+            for chunk_num in range(total_chunks):
+                start = chunk_num * chunk_size
+                end = min(start + chunk_size, len(file_data))
+                chunk_data = file_data[start:end]
+                
+                print(f"Debug: Chunk {chunk_num}: {len(chunk_data)} bytes")
+                
+                # Encode chunk as base64
+                chunk_b64 = base64.b64encode(chunk_data).decode('utf-8')
+                
+                # Send chunk
+                msg_dict = {
+                    'TYPE': 'FILE_CHUNK',
+                    'transfer_id': transfer_id,
+                    'chunk_number': str(chunk_num),
+                    'total_chunks': str(total_chunks),
+                    'chunk_data': chunk_b64
+                }
+                
+                self.network_manager.send_to_address(msg_dict, addr[0], addr[1])
+                print(f"Sent chunk {chunk_num + 1}/{total_chunks}")
+                
+                # Small delay to avoid overwhelming receiver
+                time.sleep(0.1)
+            
+            print(f"{Colors.GREEN}✅ File transfer completed!{Colors.RESET}")
+            print(f"Waiting for confirmation from receiver...")
+            
+        except Exception as e:
+            print(f"{Colors.RED}Error sending file chunks: {e}{Colors.RESET}")
+            # Send error confirmation
+            self._send_file_received(transfer_id, addr, 'send_error')
+    
+    def get_active_games(self):
+        """Get list of active games"""
+        return list(self.active_games.keys())
+    
+    def get_game_info(self, game_id):
+        """Get information about a specific game"""
+        return self.active_games.get(game_id)
+
+    # ==================== HELPER METHODS ====================
             
     def handle_token_revocation(self, msg_dict, addr):
         """

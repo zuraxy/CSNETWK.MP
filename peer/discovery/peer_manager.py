@@ -80,11 +80,51 @@ class PeerManager:
     
     def _discovery_loop(self):
         """Periodic discovery and cleanup loop"""
+        ping_interval = 300  # 5 minutes in seconds (LSNP protocol requirement)
+        last_ping_time = 0
+        
         while self.running:
-            time.sleep(self.discovery_interval)
-            if self.running:
+            current_time = time.time()
+            # Check if it's time to send a PING (every 5 minutes)
+            if current_time - last_ping_time >= ping_interval:
+                self.send_ping()
+                last_ping_time = current_time
+            else:
+                # Otherwise, just do normal discovery
                 self.announce_presence()
-                self.cleanup_old_peers()
+                
+            # Clean up old peers
+            self.cleanup_old_peers()
+            
+            # Sleep for the discovery interval
+            time.sleep(self.discovery_interval)
+    
+    def send_ping(self):
+        """Send a PING message to all known peers according to LSNP protocol"""
+        if not self.network_manager or not self.user_id:
+            return
+        
+        network_info = self.network_manager.get_network_info()
+        ping_message = {
+            'TYPE': 'PING',
+            'USER_ID': self.user_id,
+            'TIMESTAMP': str(int(time.time())),
+            'PORT': str(network_info['local_port']),
+            'MESSAGE_ID': self._generate_message_id()
+        }
+        
+        # Log PING if message handler has verbose mode on
+        message_handler = getattr(self.network_manager, 'message_handler', None)
+        if message_handler and getattr(message_handler, 'verbose_mode', False):
+            import datetime
+            ts_str = datetime.datetime.fromtimestamp(int(ping_message['TIMESTAMP'])).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"\nSEND > [{ts_str}] | Type: PING (Periodic)")
+            print(f"TYPE: PING")
+            print(f"USER_ID: {self.user_id}")
+        
+        # Broadcast PING to all known peers
+        success = self.network_manager.broadcast_discovery(ping_message)
+        return success
     
     def announce_presence(self):
         """Broadcast presence announcement"""
@@ -168,6 +208,13 @@ class PeerManager:
             return "[AVATAR]"
         return ""
     
+    def get_self_info(self):
+        """Get information about the current user"""
+        return {
+            'user_id': self.user_id,
+            'name': self.get_display_name(self.user_id) if self.user_id else 'Unknown'
+        }
+    
     def cleanup_old_peers(self):
         """Remove peers that haven't been seen recently"""
         current_time = time.time()
@@ -207,6 +254,47 @@ class PeerManager:
     def is_peer_known(self, user_id):
         """Check if a peer is known"""
         return user_id in self.known_peers
+    
+    def find_peer_by_handle(self, handle):
+        """Find a peer by handle (user@ip format)"""
+        try:
+            if '@' not in handle:
+                return None
+            
+            user_part, ip_part = handle.split('@', 1)
+            
+            # Look for exact match in known peers
+            for user_id, peer_info in self.known_peers.items():
+                if peer_info['ip'] == ip_part:
+                    # If user part matches or is empty, return this peer
+                    if not user_part or user_id.startswith(user_part):
+                        return {
+                            'user_id': user_id,
+                            'name': self.get_display_name(user_id),
+                            'addr': (peer_info['ip'], peer_info['port'])
+                        }
+            
+            # If no known peer found, try to create a basic peer info
+            # This allows sending to peers not yet discovered
+            try:
+                # Use default port if not specified
+                if ':' in ip_part:
+                    ip, port = ip_part.split(':', 1)
+                    port = int(port)
+                else:
+                    ip = ip_part
+                    port = 12345  # Default port
+                
+                return {
+                    'user_id': handle,
+                    'name': handle,
+                    'addr': (ip, port)
+                }
+            except ValueError:
+                return None
+                
+        except Exception:
+            return None
     
     def follow_peer(self, user_id):
         """Add a peer to your following list"""

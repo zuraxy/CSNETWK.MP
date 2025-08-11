@@ -11,7 +11,7 @@ SOCKET_BUFFER_SIZE = 65536
 BROADCAST_ADDRESSES = ['255.255.255.255', '127.0.0.1']
 
 # Peer management settings
-DISCOVERY_INTERVAL = 30  # Seconds between discovery broadcasts
+DISCOVERY_INTERVAL = 30  # Seconds between discovery broadcasts (PING every 300 seconds)
 PEER_TIMEOUT = 300       # Seconds before considering a peer offline (5 minutes)
 
 # User interface settings

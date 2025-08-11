@@ -50,6 +50,7 @@ class NetworkManager:
         
         # Message handlers registry
         self.message_handlers = {}
+        self.message_handler = None  # Reference to the message handler for logging
         self.running = False
         
     def _get_local_ip(self):
@@ -95,6 +96,13 @@ class NetworkManager:
             try:
                 data, addr = self.socket.recvfrom(SOCKET_BUFFER_SIZE)
                 self._handle_message(data, addr)
+            except OSError as e:
+                # Handle specific Windows socket errors more gracefully
+                if e.winerror == 10054:  # Connection forcibly closed
+                    # Silently ignore this error when someone disconnects
+                    continue
+                elif self.running:  # Only log other errors if we're supposed to be running
+                    print(f"Error receiving message on main socket: {e}")
             except Exception as e:
                 if self.running:  # Only log if we're supposed to be running
                     print(f"Error receiving message on main socket: {e}")
@@ -105,6 +113,13 @@ class NetworkManager:
             try:
                 data, addr = self.discovery_socket.recvfrom(SOCKET_BUFFER_SIZE)
                 self._handle_message(data, addr)
+            except OSError as e:
+                # Handle specific Windows socket errors more gracefully
+                if e.winerror == 10054:  # Connection forcibly closed
+                    # Silently ignore this error when someone disconnects
+                    continue
+                elif self.running:  # Only log other errors if we're supposed to be running
+                    print(f"Error receiving discovery message: {e}")
             except Exception as e:
                 if self.running:  # Only log if we're supposed to be running
                     print(f"Error receiving discovery message: {e}")
@@ -115,15 +130,23 @@ class NetworkManager:
             msg_dict = Protocol.decode_message(data)
             msg_type = msg_dict.get('TYPE', '')
             
+            # Debug: Show all incoming messages
+            if msg_type.startswith('FILE_'):
+                print(f"Debug: Received {msg_type} message from {addr}")
+                print(f"Debug: Message content: {msg_dict}")
+            
             # Skip token validation for discovery and profile related messages
             # Token validation will be done at the message handler level
             if msg_type in self.message_handlers:
                 self.message_handlers[msg_type](msg_dict, addr)
             else:
                 print(f"Unknown message type: {msg_type}")
+                print(f"Debug: Available handlers: {list(self.message_handlers.keys())}")
                 
         except Exception as e:
             print(f"Error processing message from {addr}: {e}")
+            import traceback
+            traceback.print_exc()
     
     def send_to_address(self, data, ip, port):
         """Send data to a specific address"""

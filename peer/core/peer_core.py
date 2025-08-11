@@ -30,6 +30,9 @@ class UDPPeerModular:
         self.message_handler = MessageHandler(self.network_manager, self.peer_manager)
         self.user_interface = UserInterface(self.message_handler, self.peer_manager)
         
+        # Store reference to message_handler in network_manager for logging
+        self.network_manager.message_handler = self.message_handler
+        
         # Connect peer manager with network manager
         self.peer_manager.set_network_manager(self.network_manager)
         
