@@ -83,6 +83,7 @@ DiscoveryManager
 ### Core Commands
 - **POST**: Broadcast messages to all discovered peers
 - **DM**: Send direct messages to specific peers
+- **DMLIST**: View direct message history with a specific peer
 - **PROFILE**: Share profile (with optional avatar) with all peers
 - **LIST**: Show all discovered peers on the network
 - **FOLLOW/UNFOLLOW**: Follow or unfollow specific peers
@@ -136,19 +137,19 @@ Verbose mode: OFF
 Peer started as alice@192.168.1.11
 Listening on 192.168.1.11:8445
 
-Commands: POST, DM, PROFILE, LIST, VERBOSE, QUIT
+Commands: POST, DM, DMLIST, PROFILE, LIST, VERBOSE, QUIT
 ```
 
 ### Broadcasting a Message
 ```
-Command (POST/DM/PROFILE/LIST/VERBOSE/QUIT): POST
+Command (POST/DM/DMLIST/PROFILE/LIST/VERBOSE/QUIT): POST
 Message: Hello everyone!
 Message broadcasted to 3 peers
 ```
 
 ### Direct Messaging
 ```
-Command (POST/DM/PROFILE/LIST/VERBOSE/QUIT): DM
+Command (POST/DM/DMLIST/PROFILE/LIST/VERBOSE/QUIT): DM
 Available peers:
   - bob@192.168.1.12 (Bob Smith)
   - charlie@192.168.1.13 (Charlie Wilson)
@@ -157,9 +158,25 @@ Message: Hey Bob, how are you?
 DM sent to bob@192.168.1.12
 ```
 
+### Viewing DM History
+```
+Command (POST/DM/DMLIST/PROFILE/LIST/VERBOSE/QUIT): DMLIST
+Peers with DM history:
+  1. bob@192.168.1.12 (Bob Smith) - 3 messages
+  2. charlie@192.168.1.13 (Charlie Wilson) - 1 messages
+
+Enter peer number or user@ip to view DMs: 1
+
+===== Direct Messages with Bob Smith (bob@192.168.1.12) =====
+[2025-08-10 14:32:15] You → Bob Smith: Hey Bob, how are you?
+[2025-08-10 14:33:22] Bob Smith → You: I'm good, Alice! How about you?
+[2025-08-10 14:35:05] You → Bob Smith: Doing great, thanks for asking!
+===== End of Messages (3 total) =====
+```
+
 ### Creating a Profile
 ```
-Command (POST/DM/PROFILE/LIST/VERBOSE/QUIT): PROFILE
+Command (POST/DM/DMLIST/PROFILE/LIST/VERBOSE/QUIT): PROFILE
 Display Name: Alice Johnson
 Status message: Exploring P2P networking!
 Add profile picture? (y/n): y

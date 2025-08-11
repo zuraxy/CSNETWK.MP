@@ -159,6 +159,18 @@ class MessageHandler:
         message_id = msg_dict.get('MESSAGE_ID', '')
         token = msg_dict.get('TOKEN', '')
 
+        # Store the direct message regardless of whether it's for us
+        # (we track messages we receive and messages sent to others)
+        if timestamp:
+            try:
+                ts = int(timestamp)
+            except Exception:
+                ts = int(time.time())
+        else:
+            ts = int(time.time())
+            
+        self.peer_manager.store_direct_message(from_user, to_user, content, ts)
+
         # Only display if this message is for us
         if to_user == self.peer_manager.user_id:
             if self.verbose_mode:
@@ -261,14 +273,18 @@ class MessageHandler:
         if not self.peer_manager.is_peer_known(recipient):
             return False
         
+        timestamp = int(time.time())
         message = {
             'TYPE': 'DM',
             'FROM': self.peer_manager.user_id,
             'TO': recipient,
             'CONTENT': content,
-            'TIMESTAMP': str(int(time.time())),
+            'TIMESTAMP': str(timestamp),
             'MESSAGE_ID': self._generate_message_id()
         }
+        
+        # Store the outgoing message
+        self.peer_manager.store_direct_message(self.peer_manager.user_id, recipient, content, timestamp)
         
         peer_info = self.peer_manager.get_peer_info(recipient)
         if peer_info:
@@ -554,6 +570,38 @@ class MessageHandler:
     def _generate_message_id(self):
         """Generate a unique message ID"""
         return secrets.token_hex(8)
+        
+    def list_dms_from_peer(self, peer_id):
+        """List all direct messages exchanged with a specific peer"""
+        if not self.peer_manager.is_peer_known(peer_id):
+            return False, f"Peer {peer_id} is not known"
+            
+        messages = self.peer_manager.get_direct_messages(peer_id)
+        if not messages:
+            return True, f"No direct messages exchanged with {peer_id}"
+            
+        # Get display name for the peer
+        display_name = self.peer_manager.get_display_name(peer_id)
+        
+        # Format and return messages
+        print(f"\n===== Direct Messages with {display_name} ({peer_id}) =====")
+        
+        for msg in messages:
+            from_user = msg['from_user']
+            content = msg['content']
+            timestamp = msg['timestamp']
+            
+            # Format timestamp
+            ts_str = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Determine direction
+            if from_user == self.peer_manager.user_id:
+                print(f"[{ts_str}] You → {display_name}: {content}")
+            else:
+                print(f"[{ts_str}] {display_name} → You: {content}")
+                
+        print(f"===== End of Messages ({len(messages)} total) =====")
+        return True, f"Found {len(messages)} messages with {peer_id}"
         
     def _generate_token(self):
         """Generate a security token for messages"""

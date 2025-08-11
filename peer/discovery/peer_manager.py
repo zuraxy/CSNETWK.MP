@@ -19,6 +19,9 @@ class PeerManager:
         self.known_peers = {}  # user_id -> {'ip': str, 'port': int, 'last_seen': timestamp}
         self.user_profiles = {}  # user_id -> {'display_name': str, 'avatar': bool, 'avatar_type': str}
         
+        # Direct message storage
+        self.direct_messages = {}  # user_id -> [{'content': str, 'timestamp': int, 'from_user': str, 'to_user': str}]
+        
         # Follow/Following functionality
         self.followers = set()  # Set of user_ids who follow me
         self.following = set()  # Set of user_ids I'm following
@@ -409,6 +412,40 @@ class PeerManager:
     def _generate_message_id(self):
         """Generate a unique message ID"""
         return secrets.token_hex(8)
+        
+    def store_direct_message(self, from_user, to_user, content, timestamp):
+        """Store a direct message"""
+        # Convert timestamp to int if it's a string
+        if isinstance(timestamp, str):
+            try:
+                timestamp = int(timestamp)
+            except ValueError:
+                timestamp = int(time.time())
+        
+        # Create message object
+        dm = {
+            'from_user': from_user,
+            'to_user': to_user,
+            'content': content,
+            'timestamp': timestamp
+        }
+        
+        # Store based on the other party (whether sent or received)
+        other_party = from_user if to_user == self.user_id else to_user
+        
+        if other_party not in self.direct_messages:
+            self.direct_messages[other_party] = []
+        
+        self.direct_messages[other_party].append(dm)
+        
+    def get_direct_messages(self, peer_id):
+        """Get all direct messages exchanged with a specific peer"""
+        if peer_id not in self.direct_messages:
+            return []
+        
+        # Sort messages by timestamp
+        messages = sorted(self.direct_messages[peer_id], key=lambda x: x['timestamp'])
+        return messages
         
     # Post likes management
     def add_post(self, timestamp, content, ttl=3600):

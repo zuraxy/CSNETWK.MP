@@ -24,13 +24,13 @@ class UserInterface:
     def start_command_loop(self):
         """Start the main command processing loop"""
         print(f"\nPeer-to-Peer Chat Ready!")
-        print(f"Commands: POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GROUP, FEED, LIKE, VERBOSE, QUIT")
+        print(f"Commands: POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GROUP, FEED, LIKE, VERBOSE, QUIT")
         print(f"Verbose mode: {'ON' if self.message_handler.verbose_mode else 'OFF'}")
         
         self.running = True
         while self.running:
             try:
-                cmd = input("\nCommand (POST/DM/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/FEED/LIKE/VERBOSE/QUIT): ").strip().upper()
+                cmd = input("\nCommand (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/FEED/LIKE/VERBOSE/QUIT): ").strip().upper()
                 
                 if cmd == "QUIT" or cmd == "Q":
                     print("Goodbye!")
@@ -41,6 +41,8 @@ class UserInterface:
                     self._handle_post_command()
                 elif cmd == "DM" or cmd == "D":
                     self._handle_dm_command()
+                elif cmd == "DMLIST" or cmd == "DL":
+                    self._handle_dmlist_command()
                 elif cmd == "PROFILE" or cmd == "PROF":
                     self._handle_profile_command()
                 elif cmd == "FEED" or cmd == "F":
@@ -63,7 +65,7 @@ class UserInterface:
                     # Empty command, just continue
                     continue
                 else:
-                    print("Invalid command. Use POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, GROUP, FEED, LIKE, VERBOSE, or QUIT")
+                    print("Invalid command. Use POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, GROUP, FEED, LIKE, VERBOSE, or QUIT")
                     print("You can also use single letters: P, D, PROF, LS, UF, G, F, L, V, Q")
                     
             except KeyboardInterrupt:
@@ -146,6 +148,46 @@ class UserInterface:
                 print(f"DM sent to {recipient}")
         else:
             print(f"Error: Peer {recipient} not found or unreachable")
+    
+    def _handle_dmlist_command(self):
+        """Handle DMLIST command - show DMs from a specific peer"""
+        peers = self.peer_manager.get_all_peers()
+        if not peers:
+            print("No peers available. Use LIST to discover peers first.")
+            return
+        
+        # First, show peers with DM history
+        peers_with_dms = [peer_id for peer_id in self.peer_manager.direct_messages.keys() 
+                         if peer_id in peers or peer_id == self.peer_manager.user_id]
+        
+        if not peers_with_dms:
+            print("You haven't exchanged DMs with any peers yet.")
+            return
+        
+        print("\nPeers with DM history:")
+        for idx, peer_id in enumerate(peers_with_dms, 1):
+            display_name = self.peer_manager.get_display_name(peer_id)
+            msg_count = len(self.peer_manager.direct_messages.get(peer_id, []))
+            print(f"  {idx}. {peer_id} ({display_name}) - {msg_count} messages")
+        
+        selection = input("\nEnter peer number or user@ip to view DMs: ").strip()
+        
+        # Handle numeric selection
+        try:
+            idx = int(selection) - 1
+            if 0 <= idx < len(peers_with_dms):
+                selected_peer = peers_with_dms[idx]
+            else:
+                print("Invalid selection")
+                return
+        except ValueError:
+            # Handle direct peer_id input
+            selected_peer = selection
+        
+        # Display the DMs for the selected peer
+        success, message = self.message_handler.list_dms_from_peer(selected_peer)
+        if not success:
+            print(message)
     
     def _handle_profile_command(self):
         """Handle PROFILE command"""
