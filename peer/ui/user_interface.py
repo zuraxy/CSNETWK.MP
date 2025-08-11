@@ -24,13 +24,13 @@ class UserInterface:
     def start_command_loop(self):
         """Start the main command processing loop"""
         print(f"\nPeer-to-Peer Chat Ready!")
-        print(f"Commands: POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GROUP, VERBOSE, QUIT")
+        print(f"Commands: POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GROUP, FEED, LIKE, VERBOSE, QUIT")
         print(f"Verbose mode: {'ON' if self.message_handler.verbose_mode else 'OFF'}")
         
         self.running = True
         while self.running:
             try:
-                cmd = input("\nCommand (POST/DM/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/VERBOSE/QUIT): ").strip().upper()
+                cmd = input("\nCommand (POST/DM/PROFILE/LIST/FOLLOW/UNFOLLOW/GROUP/FEED/LIKE/VERBOSE/QUIT): ").strip().upper()
                 
                 if cmd == "QUIT" or cmd == "Q":
                     print("Goodbye!")
@@ -43,9 +43,13 @@ class UserInterface:
                     self._handle_dm_command()
                 elif cmd == "PROFILE" or cmd == "PROF":
                     self._handle_profile_command()
-                elif cmd == "LIST" or cmd == "L":
+                elif cmd == "FEED" or cmd == "F":
+                    self._handle_feed_command()
+                elif cmd == "LIKE" or cmd == "L":
+                    self._handle_like_command()
+                elif cmd == "LIST" or cmd == "LS":
                     self._handle_list_command()
-                elif cmd == "FOLLOW" or cmd == "F":
+                elif cmd == "FOLLOW":
                     self._handle_follow_command()
                 elif cmd == "UNFOLLOW" or cmd == "UF":
                     self._handle_unfollow_command()
@@ -59,8 +63,8 @@ class UserInterface:
                     # Empty command, just continue
                     continue
                 else:
-                    print("Invalid command. Use POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, GROUP, VERBOSE, or QUIT")
-                    print("You can also use single letters: P, D, L, F, UF, G, V, Q")
+                    print("Invalid command. Use POST, DM, PROFILE, LIST, FOLLOW, UNFOLLOW, GROUP, FEED, LIKE, VERBOSE, or QUIT")
+                    print("You can also use single letters: P, D, PROF, LS, UF, G, F, L, V, Q")
                     
             except KeyboardInterrupt:
                 print("\nGoodbye!")
@@ -507,9 +511,6 @@ class UserInterface:
         # Leave group
         success, message = self.peer_manager.leave_group(group_id)
         print(message)
-        # Create group
-        sent_count = self.message_handler.send_group_create(group_id, group_name, members)
-        print(f"Group created. Invitation sent to {sent_count} members.")
     
     def _handle_send_group_message(self):
         """Send a message to a group"""
@@ -744,3 +745,368 @@ class UserInterface:
             print("Please enter a valid number")
         except Exception as e:
             print(f"Error: {e}")
+    
+    def _handle_feed_command(self):
+        """Display posts from users, with options to like/unlike"""
+        import datetime
+        
+        print("\n=== Feed Options ===")
+        print("1. View your posts")
+        print("2. View posts from users you follow")
+        print("3. View liked posts")
+        print("4. Cancel")
+        
+        choice = input("Enter your choice (1-4): ").strip()
+        
+        if choice == "1":
+            self._show_my_posts()
+        elif choice == "2":
+            self._show_following_posts()
+        elif choice == "3":
+            self._show_liked_posts()
+        elif choice == "4":
+            return
+        else:
+            print("Invalid choice. Please select 1-4.")
+    
+    def _show_my_posts(self):
+        """Show posts created by the user"""
+        import datetime
+        
+        # Get posts from the peer manager
+        all_posts = self.peer_manager.my_posts
+        
+        if not all_posts:
+            print("You haven't posted anything yet.")
+            return
+            
+        # Sort posts by timestamp (newest first)
+        sorted_posts = sorted(all_posts.items(), key=lambda x: x[0], reverse=True)
+        
+        print("\n=== Your Posts ===")
+        for idx, (timestamp, content) in enumerate(sorted_posts, 1):
+            # Format timestamp
+            try:
+                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                ts_str = str(timestamp)
+                
+            # Get like count
+            like_count = self.peer_manager.get_post_likes_count(timestamp)
+            likes_label = f"{like_count} like{'s' if like_count != 1 else ''}"
+            
+            # Display post with index
+            print(f"{idx}. [{ts_str}] {content} - {likes_label}")
+            
+        print("\nTo view who liked a post, use LIKE command option 3.")
+    
+    def _show_liked_posts(self):
+        """Show posts liked by the user"""
+        import datetime
+        
+        # Get liked posts
+        liked_posts = self.peer_manager.liked_posts
+        if not liked_posts:
+            print("You haven't liked any posts yet.")
+            return
+        
+        # Parse liked posts (format: "user_id:timestamp")
+        liked_data = []
+        for like_key in liked_posts:
+            try:
+                user_id, timestamp = like_key.split(':', 1)
+                
+                # Try to get actual content if available
+                post_content = "Unknown content"
+                user_posts = self.peer_manager.get_user_posts(user_id)
+                if timestamp in user_posts:
+                    post_content = user_posts[timestamp]
+                    
+                liked_data.append((user_id, timestamp, post_content))
+            except ValueError:
+                continue
+                
+        if not liked_data:
+            print("No liked posts found.")
+            return
+                
+        # Display liked posts
+        print("\n=== Your Liked Posts ===")
+        for idx, (user_id, timestamp, content) in enumerate(liked_data, 1):
+            display_name = self.peer_manager.get_display_name(user_id) or user_id
+            
+            # Format timestamp
+            try:
+                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                ts_str = timestamp
+                
+            # Truncate content if available
+            content_display = content[:30] + ("..." if len(content) > 30 else "")
+            
+            print(f"{idx}. [{ts_str}] {display_name}: {content_display} (ID: {timestamp})")
+            
+    def _show_following_posts(self):
+        """Show posts from users you follow"""
+        import datetime
+        
+        # Get list of users you follow
+        following = self.peer_manager.following
+        
+        if not following:
+            print("You're not following anyone.")
+            return
+            
+        # Collect all posts from followed users
+        all_posts = []
+        for user_id in following:
+            posts = self.peer_manager.get_user_posts(user_id)
+            for timestamp, content in posts.items():
+                all_posts.append((user_id, timestamp, content))
+                
+        if not all_posts:
+            print("No posts from users you follow.")
+            return
+            
+        # Sort posts by timestamp (newest first)
+        sorted_posts = sorted(all_posts, key=lambda x: x[1], reverse=True)
+        
+        # Display posts
+        print("\n=== Posts from Users You Follow ===")
+        for idx, (user_id, timestamp, content) in enumerate(sorted_posts, 1):
+            # Format timestamp
+            try:
+                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                ts_str = str(timestamp)
+                
+            # Get display name
+            display_name = self.peer_manager.get_display_name(user_id) or user_id
+            
+            # Get like count
+            like_count = self.peer_manager.get_post_likes_count(timestamp)
+            likes_label = f"{like_count} like{'s' if like_count != 1 else ''}"
+            
+            # Check if user has liked this post
+            liked_status = " ❤️" if self.peer_manager.has_liked_post(user_id, timestamp) else ""
+            
+            # Display post with index
+            print(f"{idx}. [{ts_str}] {display_name}: {content} - {likes_label}{liked_status}")
+    
+    def _handle_like_command(self):
+        """Handle liking/unliking posts"""
+        print("\n=== Like/Unlike Posts ===")
+        print("1. Like a post")
+        print("2. Unlike a post")
+        print("3. View post likes")
+        print("4. Cancel")
+        
+        choice = input("Enter your choice (1-4): ").strip()
+        
+        if choice == "1":
+            self._handle_like_post()
+        elif choice == "2":
+            self._handle_unlike_post()
+        elif choice == "3":
+            self._handle_view_likes()
+        elif choice == "4":
+            return
+        else:
+            print("Invalid choice. Please select 1-4.")
+    
+    def _handle_like_post(self):
+        """Handle liking a post"""
+        import datetime
+        
+        # Get list of peers
+        peers = self.peer_manager.known_peers
+        if not peers:
+            print("You don't have any known peers.")
+            return
+            
+        # Display list of peers
+        print("\n=== Select a User ===")
+        peer_ids = list(peers.keys())
+        for idx, peer_id in enumerate(peer_ids, 1):
+            display_name = self.peer_manager.get_display_name(peer_id) or peer_id
+            print(f"{idx}. {display_name} ({peer_id})")
+            
+        # Get user selection
+        try:
+            user_idx = int(input("\nSelect user (0 to cancel): ").strip())
+            if user_idx == 0:
+                return
+                
+            if user_idx < 1 or user_idx > len(peer_ids):
+                print("Invalid selection")
+                return
+                
+            selected_user_id = peer_ids[user_idx - 1]
+            
+            # Get posts from the selected user
+            user_posts = self.peer_manager.get_user_posts(selected_user_id)
+            
+            if not user_posts:
+                print(f"No posts available from {selected_user_id}.")
+                return
+                
+            # Sort posts by timestamp (newest first)
+            sorted_posts = sorted(user_posts.items(), key=lambda x: x[0], reverse=True)
+            
+            # Display posts with formatting
+            print(f"\n=== Posts from {selected_user_id} ===")
+            for idx, (timestamp, content) in enumerate(sorted_posts, 1):
+                # Format timestamp for display
+                try:
+                    ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    ts_str = timestamp
+                
+                # Truncate long content
+                truncated = content[:50] + ("..." if len(content) > 50 else "")
+                
+                # Check if already liked
+                already_liked = self.peer_manager.has_liked_post(selected_user_id, timestamp)
+                like_status = " (Already Liked ❤️)" if already_liked else ""
+                
+                print(f"{idx}. [{ts_str}] {truncated}{like_status}  (ID: {timestamp})")
+                
+            # Get post selection
+            post_idx = int(input("\nSelect post to like (0 to cancel): ").strip())
+            if post_idx == 0:
+                return
+                
+            if post_idx < 1 or post_idx > len(sorted_posts):
+                print("Invalid selection")
+                return
+                
+            selected_timestamp = sorted_posts[post_idx - 1][0]
+            selected_content = sorted_posts[post_idx - 1][1]
+            
+            # Check if already liked
+            if self.peer_manager.has_liked_post(selected_user_id, selected_timestamp):
+                print("You already liked this post.")
+                return
+            
+            # Send like message
+            success = self.message_handler.send_like_message(selected_user_id, selected_timestamp, action='LIKE')
+            if success:
+                print(f"Liked post: \"{selected_content[:30]}...\"")
+                
+        except ValueError:
+            print("Please enter a valid number")
+    
+    def _handle_unlike_post(self):
+        """Handle unliking a post"""
+        import datetime
+        
+        # Get liked posts
+        liked_posts = self.peer_manager.liked_posts
+        if not liked_posts:
+            print("You haven't liked any posts yet.")
+            return
+        
+        # Parse liked posts (format: "user_id:timestamp")
+        liked_data = []
+        for like_key in liked_posts:
+            try:
+                user_id, timestamp = like_key.split(':', 1)
+                # Try to get actual content if available
+                post_content = "Unknown content"
+                user_posts = self.peer_manager.get_user_posts(user_id)
+                if timestamp in user_posts:
+                    post_content = user_posts[timestamp]
+                
+                liked_data.append((user_id, timestamp, post_content))
+            except ValueError:
+                continue
+                
+        if not liked_data:
+            print("No liked posts found.")
+            return
+                
+        # Display liked posts
+        print("\n=== Your Liked Posts ===")
+        for idx, (user_id, timestamp, content) in enumerate(liked_data, 1):
+            display_name = self.peer_manager.get_display_name(user_id) or user_id
+            
+            # Format timestamp
+            try:
+                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                ts_str = timestamp
+                
+            # Truncate content if available
+            content_display = content[:30] + ("..." if len(content) > 30 else "")
+            
+            print(f"{idx}. Post by {display_name} - \"{content_display}\" [{ts_str}] (ID: {timestamp})")
+            
+        # Get post selection
+        try:
+            post_idx = int(input("\nSelect post to unlike (0 to cancel): ").strip())
+            if post_idx == 0:
+                return
+                
+            if post_idx < 1 or post_idx > len(liked_data):
+                print("Invalid selection")
+                return
+                
+            selected_user_id = liked_data[post_idx - 1][0]
+            selected_timestamp = liked_data[post_idx - 1][1]
+            
+            # Send unlike message
+            success = self.message_handler.send_like_message(selected_user_id, selected_timestamp, action='UNLIKE')
+            if success:
+                print(f"Unliked post from {selected_user_id}")
+                
+        except ValueError:
+            print("Please enter a valid number")
+    
+    def _handle_view_likes(self):
+        """Handle viewing likes for a post"""
+        # Show user posts
+        all_posts = self.peer_manager.my_posts
+        
+        if not all_posts:
+            print("You haven't posted anything yet.")
+            return
+            
+        # Sort posts by timestamp (newest first)
+        sorted_posts = sorted(all_posts.items(), key=lambda x: x[0], reverse=True)
+        
+        print("\n=== Your Posts ===")
+        for idx, (timestamp, content) in enumerate(sorted_posts, 1):
+            # Get like count
+            like_count = self.peer_manager.get_post_likes_count(timestamp)
+            likes_label = f"{like_count} like{'s' if like_count != 1 else ''}"
+            
+            # Display post with index
+            print(f"{idx}. {content[:30]}... - {likes_label}")
+            
+        # Get post index
+        try:
+            post_idx = int(input("Enter post number to view likes (0 to cancel): ").strip())
+            if post_idx == 0:
+                return
+                
+            if post_idx < 1 or post_idx > len(sorted_posts):
+                print("Invalid post number")
+                return
+                
+            # Get post timestamp
+            post_timestamp = sorted_posts[post_idx - 1][0]
+            post_content = sorted_posts[post_idx - 1][1]
+            
+            # Get likes
+            likers = self.peer_manager.get_post_likes(post_timestamp)
+            if not likers:
+                print(f"No likes for post: \"{post_content[:30]}...\"")
+                return
+                
+            print(f"\nLikes for post \"{post_content[:30]}...\":")
+            for liker_id in likers:
+                display_name = self.peer_manager.get_display_name(liker_id) or liker_id
+                print(f"- {display_name} ({liker_id})")
+                
+        except ValueError:
+            print("Please enter a valid number")

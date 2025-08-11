@@ -85,6 +85,11 @@ DiscoveryManager
 - **DM**: Send direct messages to specific peers
 - **PROFILE**: Share profile (with optional avatar) with all peers
 - **LIST**: Show all discovered peers on the network
+- **FOLLOW/UNFOLLOW**: Follow or unfollow specific peers
+- **FOLLOWING/FOLLOWERS**: View your following/followers lists
+- **GROUP**: Create and manage group chats
+- **FEED**: View your posts and liked posts
+- **LIKE**: Like, unlike, and view likes on posts
 - **VERBOSE**: Toggle between technical and user-friendly display
 - **QUIT**: Exit the peer application
 
@@ -92,6 +97,9 @@ DiscoveryManager
 - 🔍 **Automatic Peer Discovery**: Peers find each other via UDP broadcast
 - 💬 **Direct Communication**: No relay through central server
 - 📷 **Avatar Support**: Profile pictures in base64 encoding
+- 👥 **Group Chat**: Create groups and send messages to multiple peers simultaneously
+- 👍 **Social Interactions**: Like/unlike posts and track engagement
+- 🎮 **Games**: Built-in Rock Paper Scissors game with history tracking and leaderboard
 - 🎛️ **Verbose/Clean Modes**: Technical details or user-friendly display
 - 🌐 **Network Resilience**: Self-healing peer topology
 

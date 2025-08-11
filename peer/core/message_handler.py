@@ -43,6 +43,9 @@ class MessageHandler:
         self.network_manager.register_message_handler('GROUP_CREATE', self.handle_group_create)
         self.network_manager.register_message_handler('GROUP_UPDATE', self.handle_group_update)
         self.network_manager.register_message_handler('GROUP_MESSAGE', self.handle_group_message)
+        
+        # Like message handlers
+        self.network_manager.register_message_handler('LIKE', self.handle_like_message)
     
     def set_verbose_mode(self, verbose):
         """Set verbose mode for message display"""
@@ -109,6 +112,10 @@ class MessageHandler:
             if self.verbose_mode:
                 print(f"\n[FILTERED] POST from {user_id} ignored - not following this user")
             return
+            
+        # Track this post so we can like it later
+        if timestamp:
+            self.peer_manager.add_received_post(user_id, timestamp, content)
 
         if self.verbose_mode:
             # Format timestamp
@@ -205,13 +212,17 @@ class MessageHandler:
     
     def send_post_message(self, content):
         """Send a broadcast POST message to followers only"""
+        timestamp = str(int(time.time()))
         message = {
             'TYPE': 'POST',
             'USER_ID': self.peer_manager.user_id,
             'CONTENT': content,
-            'TIMESTAMP': str(int(time.time())),
+            'TIMESTAMP': timestamp,
             'MESSAGE_ID': self._generate_message_id()
         }
+        
+        # Track this post in the peer manager
+        self.peer_manager.add_post(timestamp, content)
         
         # Get only peers who follow you
         followers = self.peer_manager.get_followers()
@@ -529,6 +540,10 @@ class MessageHandler:
     
     def _generate_message_id(self):
         """Generate a unique message ID"""
+        return secrets.token_hex(8)
+        
+    def _generate_token(self):
+        """Generate a security token for messages"""
         return secrets.token_hex(8)
 
     def handle_follow_request(self, msg_dict, addr):
@@ -865,6 +880,115 @@ class MessageHandler:
         else:
             # User-friendly format
             print(f"\n[{group_name}] {display_name}: {content}")
+    
+    # Like/Unlike message handling
+    def handle_like_message(self, msg_dict, addr):
+        """Handle like/unlike messages"""
+        import datetime
+
+        from_user = msg_dict.get('FROM', 'Unknown')
+        to_user = msg_dict.get('TO', 'Unknown')
+        post_timestamp = msg_dict.get('POST_TIMESTAMP', '')
+        action = msg_dict.get('ACTION', 'LIKE')
+        timestamp = msg_dict.get('TIMESTAMP', int(time.time()))
+        token = msg_dict.get('TOKEN', '')
+        
+        # Only process if this is for our post
+        if to_user != self.peer_manager.user_id:
+            return
+        
+        # Verify post exists
+        post_content = self.peer_manager.get_post_content(post_timestamp)
+        if not post_content and action == 'LIKE':
+            # Post doesn't exist, ignore like
+            return
+            
+        # Handle the like/unlike
+        display_name = self.peer_manager.get_display_name(from_user) or from_user
+        
+        if self.verbose_mode:
+            # Format timestamp
+            try:
+                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                ts_str = str(timestamp)
+                
+            post_ts_str = "Unknown"
+            try:
+                post_ts_str = datetime.datetime.fromtimestamp(int(post_timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                post_ts_str = str(post_timestamp)
+                
+            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: LIKE")
+            print(f"FROM: {from_user}")
+            print(f"TO: {to_user}")
+            print(f"POST_TIMESTAMP: {post_timestamp} ({post_ts_str})")
+            print(f"ACTION: {action}")
+            print(f"TIMESTAMP: {timestamp}")
+            print(f"TOKEN: {token}")
+        else:
+            # User-friendly format
+            truncated_post = post_content[:30] + ("..." if len(post_content) > 30 else "")
+            if action == 'LIKE':
+                print(f"\n{display_name} likes your post \"{truncated_post}\"")
+            else:
+                print(f"\n{display_name} unliked your post \"{truncated_post}\"")
+        
+        # Update likes in peer manager
+        if action == 'LIKE':
+            self.peer_manager.like_post(to_user, post_timestamp)
+        else:
+            self.peer_manager.unlike_post(to_user, post_timestamp)
+            
+    def send_like_message(self, post_author, post_timestamp, action='LIKE'):
+        """Send a like/unlike message to a post author
+        
+        Args:
+            post_author (str): User ID of the post author
+            post_timestamp (str): Timestamp of the post to like/unlike
+            action (str): Either 'LIKE' or 'UNLIKE'
+        
+        Returns:
+            bool: True if the message was sent, False otherwise
+        """
+        # Verify the author is known
+        if post_author not in self.peer_manager.known_peers:
+            print(f"\n[ERROR] Unknown user {post_author}")
+            return False
+            
+        # Create the message
+        message = {
+            'TYPE': 'LIKE',
+            'FROM': self.peer_manager.user_id,
+            'TO': post_author,
+            'POST_TIMESTAMP': post_timestamp,
+            'ACTION': action,
+            'TIMESTAMP': str(int(time.time())),
+            'MESSAGE_ID': self._generate_message_id(),
+            'TOKEN': self._generate_token()  # Optional security token
+        }
+        
+        # Update local state
+        if action == 'LIKE':
+            self.peer_manager.like_post(post_author, post_timestamp)
+        else:
+            self.peer_manager.unlike_post(post_author, post_timestamp)
+            
+        # Send the message to the post author
+        peer_info = self.peer_manager.get_peer_info(post_author)
+        if peer_info:
+            success = self.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
+            
+            if success:
+                if self.verbose_mode:
+                    print(f"\n[LIKE] {'Liked' if action == 'LIKE' else 'Unliked'} post from {post_author} ({post_timestamp})")
+                return True
+            else:
+                print(f"\n[ERROR] Failed to send {'like' if action == 'LIKE' else 'unlike'} message to {post_author}")
+                return False
+        else:
+            print(f"\n[ERROR] Could not find address for {post_author}")
+            return False
         timestamp = msg_dict.get('TIMESTAMP', None)
         token = msg_dict.get('TOKEN', '')
         msg_type = msg_dict.get('TYPE', 'GROUP_MESSAGE')

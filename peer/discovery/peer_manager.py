@@ -27,6 +27,12 @@ class PeerManager:
         self.groups = {}  # group_id -> {'name': str, 'creator': user_id, 'members': set(), 'created_at': timestamp}
         self.created_groups = set()  # Set of group_ids I've created
         
+        # Post likes functionality
+        self.liked_posts = set()  # Set of post_timestamps I've liked
+        self.post_likes = {}  # post_timestamp -> set(user_ids who liked it)
+        self.my_posts = {}  # timestamp -> content (posts I've created)
+        self.received_posts = {}  # user_id -> {timestamp -> content} (posts from other users)
+        
         # Discovery state
         self.user_id = ""
         self.network_manager = None
@@ -403,3 +409,66 @@ class PeerManager:
     def _generate_message_id(self):
         """Generate a unique message ID"""
         return secrets.token_hex(8)
+        
+    # Post likes management
+    def add_post(self, timestamp, content):
+        """Track a post created by the user"""
+        self.my_posts[timestamp] = content
+        return True
+        
+    def add_received_post(self, user_id, timestamp, content):
+        """Track a post received from another user"""
+        if user_id not in self.received_posts:
+            self.received_posts[user_id] = {}
+        self.received_posts[user_id][timestamp] = content
+        return True
+        
+    def get_user_posts(self, user_id):
+        """Get posts from a specific user"""
+        if user_id == self.user_id:
+            return self.my_posts
+        else:
+            return self.received_posts.get(user_id, {})
+        
+    def like_post(self, post_author, post_timestamp):
+        """Like a post"""
+        # Track that the current user has liked this post
+        like_key = f"{post_author}:{post_timestamp}"
+        self.liked_posts.add(like_key)
+        
+        # Add the like to the post
+        if post_timestamp not in self.post_likes:
+            self.post_likes[post_timestamp] = set()
+        self.post_likes[post_timestamp].add(self.user_id)
+        
+        return True
+        
+    def unlike_post(self, post_author, post_timestamp):
+        """Unlike a post"""
+        # Remove from liked posts
+        like_key = f"{post_author}:{post_timestamp}"
+        if like_key in self.liked_posts:
+            self.liked_posts.remove(like_key)
+        
+        # Remove the like from the post
+        if post_timestamp in self.post_likes and self.user_id in self.post_likes[post_timestamp]:
+            self.post_likes[post_timestamp].remove(self.user_id)
+            
+        return True
+        
+    def has_liked_post(self, post_author, post_timestamp):
+        """Check if the user has liked a post"""
+        like_key = f"{post_author}:{post_timestamp}"
+        return like_key in self.liked_posts
+        
+    def get_post_likes(self, post_timestamp):
+        """Get users who liked a post"""
+        return self.post_likes.get(post_timestamp, set())
+        
+    def get_post_likes_count(self, post_timestamp):
+        """Get the number of likes for a post"""
+        return len(self.post_likes.get(post_timestamp, set()))
+        
+    def get_post_content(self, post_timestamp):
+        """Get the content of a post"""
+        return self.my_posts.get(post_timestamp, "")
