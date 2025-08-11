@@ -20,6 +20,9 @@ class PeerManager:
         self.known_peers = {}  # user_id -> {'ip': str, 'port': int, 'last_seen': timestamp}
         self.user_profiles = {}  # user_id -> {'display_name': str, 'avatar': bool, 'avatar_type': str}
         
+        # Keep track of peers that have explicitly left (sent REVOKE)
+        self.revoked_peers = set()  # Set of user_ids that have explicitly left
+        
         # Direct message storage
         self.direct_messages = {}  # user_id -> [{'content': str, 'timestamp': int, 'from_user': str, 'to_user': str}]
         
@@ -159,6 +162,10 @@ class PeerManager:
         """Handle incoming peer discovery messages"""
         sender_id = msg_dict.get('USER_ID', '')
         if sender_id and sender_id != self.user_id:
+            # Skip if this peer has explicitly revoked (quit the network)
+            if sender_id in self.revoked_peers:
+                return
+                
             # Check if this is a new peer (not already known)
             is_new_peer = sender_id not in self.known_peers
             
@@ -235,6 +242,8 @@ class PeerManager:
         for user_id, peer_info in self.known_peers.items():
             if current_time - peer_info['last_seen'] > self.peer_timeout:
                 peers_to_remove.append(user_id)
+                # Add to revoked list to prevent auto-rediscovery
+                self.revoked_peers.add(user_id)
         
         for user_id in peers_to_remove:
             del self.known_peers[user_id]

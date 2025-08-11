@@ -33,6 +33,9 @@ class UDPPeerModular:
         # Store reference to message_handler in network_manager for logging
         self.network_manager.message_handler = self.message_handler
         
+        # Shutdown flag to prevent multiple shutdowns
+        self._is_shutting_down = False
+        
         # Connect peer manager with network manager
         self.peer_manager.set_network_manager(self.network_manager)
         
@@ -101,10 +104,19 @@ class UDPPeerModular:
         except Exception as e:
             print(f"Error starting peer: {e}")
         finally:
-            self.shutdown()
+            self._shutdown()
+    
+    def shutdown(self):
+        """Clean shutdown of all components - public method"""
+        self._shutdown()
     
     def _shutdown(self):
         """Clean shutdown of all components"""
+        # Prevent multiple shutdown calls
+        if self._is_shutting_down:
+            return
+        self._is_shutting_down = True
+            
         print("Shutting down peer...")
         
         # Revoke all tokens for this user
@@ -127,18 +139,21 @@ class UDPPeerModular:
     
     def _broadcast_token_revocation(self):
         """Broadcast token revocation to all peers"""
-        # Create revocation message
-        message = {
-            'TYPE': 'REVOKE',
-            'USER_ID': self.peer_manager.user_id,
-            'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': secrets.token_hex(8)
-        }
-        
-        # Send to all peers
-        peers = self.peer_manager.get_all_peers()
-        sent_count = self.network_manager.broadcast_to_peers(message, peers)
-        print(f"Sent token revocation to {sent_count} peers")
+        try:
+            # Create revocation message
+            message = {
+                'TYPE': 'REVOKE',
+                'USER_ID': self.peer_manager.user_id,
+                'TIMESTAMP': str(int(time.time())),
+                'MESSAGE_ID': secrets.token_hex(8)
+            }
+            
+            # Send to all peers
+            peers = self.peer_manager.get_all_peers()
+            sent_count = self.network_manager.broadcast_to_peers(message, peers)
+            print(f"Sent token revocation to {sent_count} peers")
+        except Exception as e:
+            print(f"Error sending token revocation: {e}")
     
     def _on_peer_discovered(self, user_id):
         """Callback when a new peer is discovered"""
@@ -171,7 +186,12 @@ def main():
         peer.start()
     except Exception as e:
         print(f"Fatal error: {e}")
-        peer.shutdown()
+    finally:
+        # Always ensure clean shutdown
+        try:
+            peer._shutdown()
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
 
 
 if __name__ == "__main__":

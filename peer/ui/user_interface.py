@@ -38,24 +38,11 @@ class UserInterface:
                 
                 if cmd == "QUIT" or cmd == "Q":
                     print("Logging out and revoking all tokens...")
-                    # Revoke all tokens before quitting
-                    self.peer_manager.revoke_all_tokens()
                     
-                    # Send token revocation messages to all peers
-                    for user_id in self.peer_manager.get_peer_list():
-                        peer_info = self.peer_manager.get_peer_info(user_id)
-                        if peer_info:
-                            # Create a message with the REVOKE type
-                            message = {
-                                'TYPE': 'REVOKE',
-                                'USER_ID': self.peer_manager.user_id,
-                                'TIMESTAMP': str(int(time.time())),
-                                'MESSAGE_ID': secrets.token_hex(8)
-                            }
-                            self.message_handler.network_manager.send_to_address(message, peer_info['ip'], peer_info['port'])
-                    
-                    print("Goodbye!")
+                    # Signal the peer to stop (this will trigger the shutdown process)
                     self.running = False
+                    print("Goodbye!")
+                    
                 elif cmd == "VERBOSE" or cmd == "V":
                     self._handle_verbose_command()
                 elif cmd == "POST" or cmd == "P":

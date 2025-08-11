@@ -122,6 +122,10 @@ class MessageHandler:
         # Skip if the message is from ourselves
         if user_id == self.peer_manager.user_id:
             return
+            
+        # Skip if this peer has explicitly revoked (quit the network)
+        if user_id in self.peer_manager.revoked_peers:
+            return
         
         # Update peer information (similar to discovery but specifically for PING)
         self.peer_manager.update_peer_info(user_id, addr[0], addr[1])
@@ -2033,17 +2037,49 @@ class MessageHandler:
         Returns:
             bool: True if token was successfully revoked
         """
+        user_id = msg_dict.get('USER_ID')
         token = msg_dict.get('TOKEN')
-        if not token:
-            return False
-            
+        
         # Log the revocation if in verbose mode
         if self.verbose_mode:
-            print(f"\nTYPE: REVOKE")
-            print(f"TOKEN: {token}")
+            print(f"\nRECV < From {addr[0]} | Type: REVOKE")
+            print(f"TYPE: REVOKE")
+            if user_id:
+                print(f"USER_ID: {user_id}")
+            if token:
+                print(f"TOKEN: {token}")
+        
+        # Remove the peer from the known peers list
+        if user_id and user_id in self.peer_manager.known_peers:
+            if self.verbose_mode:
+                print(f"[PEER LEFT] {user_id} has quit")
             
-        # Revoke the token
-        return self.peer_manager.revoke_token(token)
+            # Remove from known peers
+            if user_id in self.peer_manager.known_peers:
+                del self.peer_manager.known_peers[user_id]
+            
+            # Add to revoked peers list to prevent rediscovery
+            self.peer_manager.revoked_peers.add(user_id)
+            
+            # Remove from user profiles
+            if user_id in self.peer_manager.user_profiles:
+                del self.peer_manager.user_profiles[user_id]
+            
+            # Remove from followers and following lists
+            if user_id in self.peer_manager.followers:
+                self.peer_manager.followers.remove(user_id)
+            if user_id in self.peer_manager.following:
+                self.peer_manager.following.remove(user_id)
+            
+            # Trigger callback if set
+            if self.peer_manager.on_peer_lost:
+                self.peer_manager.on_peer_lost(user_id)
+        
+        # Revoke the token if provided
+        if token:
+            return self.peer_manager.revoke_token(token)
+        
+        return True
     
     def send_token_revocation(self, token, target_user_id=None):
         """

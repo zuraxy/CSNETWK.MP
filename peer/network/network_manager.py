@@ -86,9 +86,21 @@ class NetworkManager:
     def stop_listening(self):
         """Stop listening for messages"""
         self.running = False
-        self.socket.close()
-        if self.has_discovery_socket:
-            self.discovery_socket.close()
+        
+        # Safely close sockets
+        try:
+            if hasattr(self, 'socket') and self.socket:
+                self.socket.close()
+                self.socket = None
+        except Exception as e:
+            print(f"Error closing main socket: {e}")
+            
+        try:
+            if self.has_discovery_socket and hasattr(self, 'discovery_socket') and self.discovery_socket:
+                self.discovery_socket.close()
+                self.discovery_socket = None
+        except Exception as e:
+            print(f"Error closing discovery socket: {e}")
     
     def _listen_main_socket(self):
         """Listen for messages on main socket"""
@@ -151,6 +163,11 @@ class NetworkManager:
     def send_to_address(self, data, ip, port):
         """Send data to a specific address"""
         try:
+            # Check if socket is still valid (not closed)
+            if not hasattr(self, 'socket') or self.socket is None:
+                print(f"Cannot send to {ip}:{port}: Socket is closed")
+                return False
+                
             if isinstance(data, dict):
                 encoded_data = Protocol.encode_message(data)
             else:
@@ -165,6 +182,11 @@ class NetworkManager:
     def broadcast_discovery(self, message):
         """Broadcast a discovery message"""
         try:
+            # Check if socket is still valid (not closed)
+            if not hasattr(self, 'socket') or self.socket is None:
+                print("Cannot broadcast: Socket is closed")
+                return False
+                
             encoded_data = Protocol.encode_message(message)
             # Broadcast to local network using configured addresses
             # Skip localhost (127.0.0.1) to avoid receiving our own messages
@@ -178,6 +200,11 @@ class NetworkManager:
     
     def broadcast_to_peers(self, data, peer_list):
         """Send data to all peers in the list"""
+        # Check if socket is still valid (not closed)
+        if not hasattr(self, 'socket') or self.socket is None:
+            print("Cannot broadcast to peers: Socket is closed")
+            return 0
+            
         sent_count = 0
         for peer_info in peer_list.values():
             if self.send_to_address(data, peer_info['ip'], peer_info['port']):

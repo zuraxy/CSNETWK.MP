@@ -53,4 +53,8 @@ Getting Started:
 4. Start chatting with POST and DM commands!
 """)
     
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"Fatal error in main: {e}")
+    # No need to call shutdown explicitly - it's handled in the main() function
