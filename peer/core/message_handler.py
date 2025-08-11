@@ -51,6 +51,11 @@ class MessageHandler:
         self.network_manager.register_message_handler('FOLLOW_RESPONSE', self.handle_follow_response)
         self.network_manager.register_message_handler('UNFOLLOW_RESPONSE', self.handle_unfollow_response)
         
+        # Group message handlers
+        self.network_manager.register_message_handler('GROUP_CREATE', self.handle_group_create)
+        self.network_manager.register_message_handler('GROUP_UPDATE', self.handle_group_update)
+        self.network_manager.register_message_handler('GROUP_MESSAGE', self.handle_group_message)
+        
         # Tic-Tac-Toe game message handlers
         self.network_manager.register_message_handler('TICTACTOE_INVITE', self.handle_tictactoe_invite)
         self.network_manager.register_message_handler('TICTACTOE_MOVE', self.handle_tictactoe_move)
@@ -596,6 +601,11 @@ class MessageHandler:
         member_set.add(self.peer_manager.user_id)
         members_str = ','.join(member_set)
         
+        # Create token with group scope
+        token = self.peer_manager.create_token("group")
+        message_id = self._generate_message_id()
+        timestamp = str(int(time.time()))
+        
         # Prepare message
         message = {
             'TYPE': 'GROUP_CREATE',
@@ -603,9 +613,24 @@ class MessageHandler:
             'GROUP_ID': group_id,
             'GROUP_NAME': group_name,
             'MEMBERS': members_str,
-            'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': self._generate_message_id()
+            'TIMESTAMP': timestamp,
+            'MESSAGE_ID': message_id,
+            'TOKEN': token
         }
+        
+        # Log the message if in verbose mode
+        if self.verbose_mode:
+            import datetime
+            ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"\nSEND > [{ts_str}] To multiple recipients | Type: GROUP_CREATE")
+            print(f"TYPE: GROUP_CREATE")
+            print(f"MESSAGE_ID: {message_id}")
+            print(f"FROM: {self.peer_manager.user_id}")
+            print(f"GROUP_ID: {group_id}")
+            print(f"GROUP_NAME: {group_name}")
+            print(f"MEMBERS: {members_str}")
+            print(f"TIMESTAMP: {timestamp}")
+            print(f"TOKEN: {token}")
         
         # Process locally to create the group for the current user
         self.handle_group_create(message, ('127.0.0.1', 0))
@@ -650,6 +675,11 @@ class MessageHandler:
         add_str = ','.join(add_set) if add_set else ''
         remove_str = ','.join(remove_set) if remove_set else ''
         
+        # Create token with group scope
+        token = self.peer_manager.create_token("group")
+        message_id = self._generate_message_id()
+        timestamp = str(int(time.time()))
+        
         # Prepare message
         message = {
             'TYPE': 'GROUP_UPDATE',
@@ -657,9 +687,26 @@ class MessageHandler:
             'GROUP_ID': group_id,
             'ADD': add_str,
             'REMOVE': remove_str,
-            'TIMESTAMP': str(int(time.time())),
-            'MESSAGE_ID': self._generate_message_id()
+            'TIMESTAMP': timestamp,
+            'MESSAGE_ID': message_id,
+            'TOKEN': token
         }
+        
+        # Log the message if in verbose mode
+        if self.verbose_mode:
+            import datetime
+            ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"\nSEND > [{ts_str}] To group members | Type: GROUP_UPDATE")
+            print(f"TYPE: GROUP_UPDATE")
+            print(f"MESSAGE_ID: {message_id}")
+            print(f"FROM: {self.peer_manager.user_id}")
+            print(f"GROUP_ID: {group_id}")
+            if add_str:
+                print(f"ADD: {add_str}")
+            if remove_str:
+                print(f"REMOVE: {remove_str}")
+            print(f"TIMESTAMP: {timestamp}")
+            print(f"TOKEN: {token}")
         
         # Process locally first
         self.handle_group_update(message, ('127.0.0.1', 0))
@@ -699,10 +746,11 @@ class MessageHandler:
         group_name = self.peer_manager.get_group_name(group_id) or group_id
         
         # Generate timestamp
-        timestamp = int(time.time())
+        timestamp = str(int(time.time()))
         
         # Create a token with group scope
-        token = self._generate_token("group")
+        token = self.peer_manager.create_token("group")
+        message_id = self._generate_message_id()
         
         # Prepare message
         message = {
@@ -710,13 +758,26 @@ class MessageHandler:
             'FROM': self.peer_manager.user_id,
             'GROUP_ID': group_id,
             'CONTENT': content,
-            'TIMESTAMP': str(timestamp),
-            'MESSAGE_ID': self._generate_message_id(),
+            'TIMESTAMP': timestamp,
+            'MESSAGE_ID': message_id,
             'TOKEN': token
         }
         
+        # Log the message if in verbose mode
+        if self.verbose_mode:
+            import datetime
+            ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"\nSEND > [{ts_str}] To group {group_name} | Type: GROUP_MESSAGE")
+            print(f"TYPE: GROUP_MESSAGE")
+            print(f"MESSAGE_ID: {message_id}")
+            print(f"FROM: {self.peer_manager.user_id}")
+            print(f"GROUP_ID: {group_id}")
+            print(f"CONTENT: {content}")
+            print(f"TIMESTAMP: {timestamp}")
+            print(f"TOKEN: {token}")
+        
         # Store the message locally
-        self.peer_manager.store_group_message(group_id, self.peer_manager.user_id, content, timestamp)
+        self.peer_manager.store_group_message(group_id, self.peer_manager.user_id, content, int(timestamp))
         
         # Process locally first (show in own chat)
         self.handle_group_message(message, ('127.0.0.1', 0))
@@ -1107,6 +1168,16 @@ class MessageHandler:
         group_name = msg_dict.get('GROUP_NAME', '')
         members_str = msg_dict.get('MEMBERS', '')
         timestamp = msg_dict.get('TIMESTAMP', int(time.time()))
+        token = msg_dict.get('TOKEN', '')
+        message_id = msg_dict.get('MESSAGE_ID', '')
+        
+        # Validate token - local messages (from self) skip validation
+        if addr[0] != '127.0.0.1':
+            is_valid, reason = self.validate_message_token(msg_dict, addr[0])
+            if not is_valid:
+                if self.verbose_mode:
+                    print(f"\n[REJECTED] GROUP_CREATE from {from_user} - Invalid token: {reason}")
+                return
         
         # Parse members list
         if members_str:
@@ -1125,11 +1196,14 @@ class MessageHandler:
                 ts_str = str(timestamp)
                 
             print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: GROUP_CREATE")
+            print(f"TYPE: GROUP_CREATE")
+            print(f"MESSAGE_ID: {message_id}")
             print(f"FROM: {from_user}")
             print(f"GROUP_ID: {group_id}")
             print(f"GROUP_NAME: {group_name}")
             print(f"MEMBERS: {members_str}")
             print(f"TIMESTAMP: {timestamp}")
+            print(f"TOKEN: {token}")
         else:
             print(f"\nYou've been added to {group_name}")
             
@@ -1145,10 +1219,23 @@ class MessageHandler:
         add_members_str = msg_dict.get('ADD', '')
         remove_members_str = msg_dict.get('REMOVE', '')
         timestamp = msg_dict.get('TIMESTAMP', int(time.time()))
+        token = msg_dict.get('TOKEN', '')
+        message_id = msg_dict.get('MESSAGE_ID', '')
+        
+        # Validate token - local messages (from self) skip validation
+        if addr[0] != '127.0.0.1':
+            is_valid, reason = self.validate_message_token(msg_dict, addr[0])
+            if not is_valid:
+                if self.verbose_mode:
+                    print(f"\n[REJECTED] GROUP_UPDATE from {from_user} - Invalid token: {reason}")
+                return
         
         # Parse add/remove lists
         add_members = set(member.strip() for member in add_members_str.split(',') if member.strip())
         remove_members = set(member.strip() for member in remove_members_str.split(',') if member.strip())
+        
+        # Get group info
+        group = self.peer_manager.get_group(group_id)
         
         if self.verbose_mode:
             # Format timestamp
@@ -1158,10 +1245,17 @@ class MessageHandler:
                 ts_str = str(timestamp)
                 
             print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: GROUP_UPDATE")
+            print(f"TYPE: GROUP_UPDATE")
+            print(f"MESSAGE_ID: {message_id}")
             print(f"FROM: {from_user}")
             print(f"GROUP_ID: {group_id}")
             if add_members:
                 print(f"ADD: {add_members_str}")
+            if remove_members:
+                print(f"REMOVE: {remove_members_str}")
+            print(f"TIMESTAMP: {timestamp}")
+            print(f"TOKEN: {token}")
+            print(f"✅ Group updated successfully")
             if remove_members:
                 print(f"REMOVE: {remove_members_str}")
             print(f"TIMESTAMP: {timestamp}")
@@ -1246,6 +1340,7 @@ class MessageHandler:
         content = msg_dict.get('CONTENT', '')
         timestamp = msg_dict.get('TIMESTAMP', int(time.time()))
         token = msg_dict.get('TOKEN', '')
+        message_id = msg_dict.get('MESSAGE_ID', '')
         
         # Validate token - local messages (from self) skip validation
         if addr[0] != '127.0.0.1':
@@ -1275,11 +1370,13 @@ class MessageHandler:
                 ts_str = str(timestamp)
                 
             print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: GROUP_MESSAGE")
+            print(f"TYPE: GROUP_MESSAGE")
+            print(f"MESSAGE_ID: {message_id}")
             print(f"FROM: {from_user}")
             print(f"GROUP_ID: {group_id}")
-            print(f"GROUP_NAME: {group_name}")
             print(f"CONTENT: {content}")
             print(f"TIMESTAMP: {timestamp}")
+            print(f"TOKEN: {token}")
         else:
             # User-friendly format
             print(f"\n[{group_name}] {display_name}: {content}")

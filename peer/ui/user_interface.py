@@ -27,13 +27,13 @@ class UserInterface:
     def start_command_loop(self):
         """Start the main command processing loop"""
         print(f"\nPeer-to-Peer Chat Ready!")
-        print(f"Commands: POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, FILE, GROUPVIEW, FEED, LIKE, VERBOSE, QUIT")
+        print(f"Commands: POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, FILE, GROUP, GROUPVIEW, FEED, LIKE, VERBOSE, QUIT")
         print(f"Verbose mode: {'ON' if self.message_handler.verbose_mode else 'OFF'}")
         
         self.running = True
         while self.running:
             try:
-                original_cmd = input("\nCommand (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/FOLLOWING/FOLLOWERS/GAME/FILE/GROUPVIEW/FEED/LIKE/VERBOSE/QUIT): ").strip()
+                original_cmd = input("\nCommand (POST/DM/DMLIST/PROFILE/LIST/FOLLOW/UNFOLLOW/FOLLOWING/FOLLOWERS/GAME/FILE/GROUP/GROUPVIEW/FEED/LIKE/VERBOSE/QUIT): ").strip()
                 cmd = original_cmd.upper()
                 
                 if cmd == "QUIT" or cmd == "Q":
@@ -71,13 +71,15 @@ class UserInterface:
                     self._handle_game_command(original_cmd)
                 elif cmd.startswith("FILE") or cmd == "FILE":
                     self._handle_file_command(original_cmd)
+                elif cmd == "GROUP" or cmd == "G":
+                    self._handle_group_command()
                 elif cmd == "GROUPVIEW" or cmd == "GV":
                     self._handle_group_overview()
                 elif cmd == "":
                     # Empty command, just continue
                     continue
                 else:
-                    print("Invalid command. Use POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, FILE, GROUPVIEW, FEED, LIKE, VERBOSE, or QUIT")
+                    print("Invalid command. Use POST, DM, DMLIST, PROFILE, LIST, FOLLOW, UNFOLLOW, FOLLOWING, FOLLOWERS, GAME, FILE, GROUP, GROUPVIEW, FEED, LIKE, VERBOSE, or QUIT")
                     print("You can also use single letters: P, D, DL, PROF, LS, UF, G, GV, F, L, V, Q")
                     
             except KeyboardInterrupt:
