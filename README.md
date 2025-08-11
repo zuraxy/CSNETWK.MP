@@ -105,6 +105,9 @@ Peer A ────[direct msg]───► Specific Peer B
     Peer D ────── Peer C
 ```
 
+### AI Disclosure
+- AI tools such as ChatGPT and CoPilot were used during the development of this project to assist in understanding protocol requirements and generating portions of the codebase. All AI-generated content, including code and explanations, was reviewed, tested, and verified by the student to ensure correctness, compliance with project specifications, and adherence to academic integrity.
+
 ### Contributors
 - AQUINO, Bon Windel
 - CHAN, Enzo Rafael
