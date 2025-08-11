@@ -1407,48 +1407,30 @@ class MessageHandler:
             if not all([transfer_id, filename, file_size]):
                 print(f"{Colors.RED}Error: Invalid file offer received{Colors.RESET}")
                 return
-        group_id = msg_dict.get('GROUP_ID', '')
-        content = msg_dict.get('CONTENT', '')
-        timestamp = msg_dict.get('TIMESTAMP', int(time.time()))
-        token = msg_dict.get('TOKEN', '')
-        
-        # Validate token - local messages (from self) skip validation
-        if addr[0] != '127.0.0.1':
-            is_valid, reason = self.validate_message_token(msg_dict, addr[0])
-            if not is_valid:
-                if self.verbose_mode:
-                    print(f"\n[REJECTED] GROUP_MESSAGE from {from_user} - Invalid token: {reason}")
-                return
-        
-        # Verify this is a valid group and we're a member
-        if not self.peer_manager.is_in_group(group_id):
-            # Not a member, ignore the message
-            return
-            
-        # Store the group message
-        self.peer_manager.store_group_message(group_id, from_user, content, timestamp)
-            
-        # Get group and sender info
-        group_name = self.peer_manager.get_group_name(group_id) or group_id
-        display_name = self.peer_manager.get_display_name(from_user) or from_user
-        
-        if self.verbose_mode:
-            # Format timestamp
-            try:
-                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
-            except Exception:
-                ts_str = str(timestamp)
-                
-            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: GROUP_MESSAGE")
-            print(f"FROM: {from_user}")
-            print(f"GROUP_ID: {group_id}")
-            print(f"GROUP_NAME: {group_name}")
-            print(f"CONTENT: {content}")
-            print(f"TIMESTAMP: {timestamp}")
-        else:
-            # User-friendly format
-            print(f"\n[{group_name}] {display_name}: {content}")
-    
+
+            # Store the file offer
+            self.pending_file_offers[transfer_id] = {
+                'filename': filename,
+                'file_size': int(file_size),
+                'file_type': file_type,
+                'description': description,
+                'sender_name': sender_name,
+                'sender_addr': addr,
+                'timestamp': time.time()
+            }
+
+            print(f"\n{Colors.CYAN}📁 File Offer Received!{Colors.RESET}")
+            print(f"From: {Colors.YELLOW}{sender_name}{Colors.RESET}")
+            print(f"File: {Colors.BLUE}{filename}{Colors.RESET}")
+            print(f"Size: {self._format_file_size(int(file_size))}")
+            print(f"Type: {file_type}")
+            print(f"Description: {description}")
+            print(f"Transfer ID: {transfer_id}")
+            print(f"Use 'FILE ACCEPT {transfer_id}' to accept or 'FILE REJECT {transfer_id}' to reject")
+
+        except Exception as e:
+            print(f"{Colors.RED}Error handling file offer: {e}{Colors.RESET}")
+
     # Like/Unlike message handling
     def handle_like_message(self, msg_dict, addr):
         """Handle like/unlike messages"""
@@ -1557,38 +1539,6 @@ class MessageHandler:
         else:
             print(f"\n[ERROR] Could not find address for {post_author}")
             return False
-        timestamp = msg_dict.get('TIMESTAMP', None)
-        token = msg_dict.get('TOKEN', '')
-        msg_type = msg_dict.get('TYPE', 'GROUP_MESSAGE')
-        message_id = msg_dict.get('MESSAGE_ID', '')
-        
-        # Check if we know about this group
-        group = self.peer_manager.get_group(group_id)
-        if not group:
-            return
-            
-            # Store the file offer
-            self.pending_file_offers[transfer_id] = {
-                'filename': filename,
-                'file_size': int(file_size),
-                'file_type': file_type,
-                'description': description,
-                'sender_name': sender_name,
-                'sender_addr': addr,
-                'timestamp': time.time()
-            }
-            
-            print(f"\n{Colors.CYAN}📁 File Offer Received!{Colors.RESET}")
-            print(f"From: {Colors.YELLOW}{sender_name}{Colors.RESET}")
-            print(f"File: {Colors.BLUE}{filename}{Colors.RESET}")
-            print(f"Size: {self._format_file_size(int(file_size))}")
-            print(f"Type: {file_type}")
-            print(f"Description: {description}")
-            print(f"Transfer ID: {transfer_id}")
-            print(f"Use 'FILE ACCEPT {transfer_id}' to accept or 'FILE REJECT {transfer_id}' to reject")
-            
-        except Exception as e:
-            print(f"{Colors.RED}Error handling file offer: {e}{Colors.RESET}")
     
     def handle_file_chunk(self, msg_dict, addr):
         """Handle FILE_CHUNK message"""
