@@ -50,6 +50,7 @@ class NetworkManager:
         
         # Message handlers registry
         self.message_handlers = {}
+        self.message_handler = None  # Reference to the message handler for logging
         self.running = False
         
     def _get_local_ip(self):

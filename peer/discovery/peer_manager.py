@@ -63,11 +63,51 @@ class PeerManager:
     
     def _discovery_loop(self):
         """Periodic discovery and cleanup loop"""
+        ping_interval = 300  # 5 minutes in seconds (LSNP protocol requirement)
+        last_ping_time = 0
+        
         while self.running:
-            time.sleep(self.discovery_interval)
-            if self.running:
+            current_time = time.time()
+            # Check if it's time to send a PING (every 5 minutes)
+            if current_time - last_ping_time >= ping_interval:
+                self.send_ping()
+                last_ping_time = current_time
+            else:
+                # Otherwise, just do normal discovery
                 self.announce_presence()
-                self.cleanup_old_peers()
+                
+            # Clean up old peers
+            self.cleanup_old_peers()
+            
+            # Sleep for the discovery interval
+            time.sleep(self.discovery_interval)
+    
+    def send_ping(self):
+        """Send a PING message to all known peers according to LSNP protocol"""
+        if not self.network_manager or not self.user_id:
+            return
+        
+        network_info = self.network_manager.get_network_info()
+        ping_message = {
+            'TYPE': 'PING',
+            'USER_ID': self.user_id,
+            'TIMESTAMP': str(int(time.time())),
+            'PORT': str(network_info['local_port']),
+            'MESSAGE_ID': self._generate_message_id()
+        }
+        
+        # Log PING if message handler has verbose mode on
+        message_handler = getattr(self.network_manager, 'message_handler', None)
+        if message_handler and getattr(message_handler, 'verbose_mode', False):
+            import datetime
+            ts_str = datetime.datetime.fromtimestamp(int(ping_message['TIMESTAMP'])).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"\nSEND > [{ts_str}] | Type: PING (Periodic)")
+            print(f"TYPE: PING")
+            print(f"USER_ID: {self.user_id}")
+        
+        # Broadcast PING to all known peers
+        success = self.network_manager.broadcast_discovery(ping_message)
+        return success
     
     def announce_presence(self):
         """Broadcast presence announcement"""

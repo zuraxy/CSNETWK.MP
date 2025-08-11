@@ -40,6 +40,7 @@ class MessageHandler:
     def _register_handlers(self):
         """Register all message type handlers"""
         self.network_manager.register_message_handler('PEER_DISCOVERY', self.handle_peer_discovery)
+        self.network_manager.register_message_handler('PING', self.handle_ping)
         self.network_manager.register_message_handler('POST', self.handle_post_message)
         self.network_manager.register_message_handler('DM', self.handle_dm_message)
         self.network_manager.register_message_handler('PROFILE', self.handle_profile_message)
@@ -80,6 +81,23 @@ class MessageHandler:
     def handle_peer_discovery(self, msg_dict, addr):
         """Handle peer discovery messages"""
         self.peer_manager.handle_peer_discovery(msg_dict, addr)
+        
+    def handle_ping(self, msg_dict, addr):
+        """Handle PING messages according to LSNP protocol"""
+        user_id = msg_dict.get('USER_ID', 'Unknown')
+        timestamp = msg_dict.get('TIMESTAMP', None)
+        
+        # Update peer information (similar to discovery but specifically for PING)
+        self.peer_manager.update_peer_info(user_id, addr[0], addr[1])
+        
+        if self.verbose_mode:
+            try:
+                ts_str = datetime.datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S') if timestamp else "N/A"
+            except Exception:
+                ts_str = str(timestamp)
+            print(f"\nRECV < [{ts_str}] From {addr[0]} | Type: PING")
+            print(f"TYPE: PING")
+            print(f"USER_ID: {user_id}")
     
     def handle_profile_message(self, msg_dict, addr):
         """Handle profile update messages"""
